@@ -8,7 +8,7 @@
 
 本项目在本地端部署了 Python 程序，利用 PyMuPDF 包进行 PDF 文档的文字提取，随后利用 api 调用 llm 模型进行摘要生成或关键词处理。该程序也可以单独运行。
 
-为方便使用，进一步将 Python 程序与 Zotero 插件集成，插件通过调用 Python 代理的 HTTP 端口运行上述程序。当用户在 Zotero 中触发 AI 处理功能时，插件会将 PDF 文件发送到本地运行的 Python 代理服务器，由代理服务器调用 AI 模型生成摘要和关键词，然后将结果返回给 Zotero 插件并保存到相应的文献条目中。插件将识别 ite 类型，仅在类型为 Journal Article 时触发调用，避免在书籍等类型的条目上错误耗费大量资源。
+为方便使用，进一步将 Python 程序与 Zotero 插件集成，插件通过调用 Python 代理的 HTTP 端口运行上述程序。当用户在 Zotero 中触发 AI 处理功能时，插件会将 PDF 文件发送到本地运行的 Python 代理服务器，由代理服务器调用 AI 模型生成摘要和关键词，然后将结果返回给 Zotero 插件并保存到相应的文献条目中。插件将识别 item 类型，仅在类型为 Journal Article 时触发调用，避免在书籍等类型的条目上错误耗费大量资源。
 
 ## 项目内容
 - `ai-agent.xpi` - 打包后的 Zotero 插件，可直接在 Zotero 中安装
