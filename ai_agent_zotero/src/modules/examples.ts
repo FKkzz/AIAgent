@@ -40,8 +40,6 @@ export class BasicExampleFactory {
     const notifierID = Zotero.Notifier.registerObserver(callback, [
       "tab",
       "item",
-      "file",
-      "collection-item",
     ]);
 
     Zotero.Plugins.addObserver({
@@ -54,6 +52,10 @@ export class BasicExampleFactory {
 
   @example
   static exampleNotifierCallback() {
+    // This function was previously showing "Open Tab Detected!" notification
+    // It has been disabled to prevent unwanted notifications
+    // Uncomment the following code if you want to restore the notification:
+    /*
     new ztoolkit.ProgressWindow(addon.data.config.addonName)
       .createLine({
         text: "Open Tab Detected!",
@@ -61,6 +63,7 @@ export class BasicExampleFactory {
         progress: 100,
       })
       .show();
+    */
   }
 
   @example

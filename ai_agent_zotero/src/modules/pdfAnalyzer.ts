@@ -4,6 +4,7 @@ import { getString } from "../utils/locale";
 declare const ztoolkit: any;
 declare const Zotero: any;
 declare const addon: any;
+declare const OS: any;
 
 export class PDFAnalyzer {
   // Track processing status to prevent duplicate requests
@@ -118,9 +119,6 @@ export class PDFAnalyzer {
       return;
     }
 
-    // Add to processing set
-    this.processingItems.add(pdfPath);
-
     const parentItem = item.parentItem;
     if (!parentItem) {
       ztoolkit.log("No parent item found");
@@ -128,6 +126,50 @@ export class PDFAnalyzer {
       this.processingItems.delete(pdfPath);
       return;
     }
+
+    // Check item type to determine if we should process it
+    const itemType = parentItem.itemType;
+    ztoolkit.log(`Parent item type: ${itemType}`);
+    
+    // Only process Journal Article types, skip Book types, and skip other types
+    if (itemType === "journalArticle") {
+      ztoolkit.log("Processing journal article");
+    } else if (itemType === "book") {
+      ztoolkit.log("Skipping book item type");
+      // Show notification that the file type is not supported
+      let progressWin: any = null;
+      progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
+        closeOnClick: true,
+        closeTime: -1,
+      })
+        .createLine({
+          text: `${addon.data.config.addonName}: ${getString("ai-item-type-not-supported" as any)} (${itemType})`,
+          type: "default",
+          progress: 100,
+        })
+        .show();
+      progressWin.startCloseTimer(3000);
+      return;
+    } else {
+      ztoolkit.log(`Skipping unsupported item type: ${itemType}`);
+      // Show notification that the file type is not supported
+      let progressWin: any = null;
+      progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
+        closeOnClick: true,
+        closeTime: -1,
+      })
+        .createLine({
+          text: `${addon.data.config.addonName}: ${getString("ai-item-type-not-supported" as any)} (${itemType})`,
+          type: "default",
+          progress: 100,
+        })
+        .show();
+      progressWin.startCloseTimer(3000);
+      return;
+    }
+
+    // Add to processing set
+    this.processingItems.add(pdfPath);
 
     // Get existing tags from the library
     const libraryID = item.libraryID;

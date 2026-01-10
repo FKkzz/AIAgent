@@ -47,7 +47,7 @@ def llm_analyze(text: str, existing_tags: list, mode: str = "both") -> dict:
     # 根据模式生成不同的提示
     if mode == "summary":
         prompt = f"""Analyze this paper.
-        1. Summarize in Chinese.
+        1. Detailed Summarize in Chinese.
         Rules: Use existing tags if possible: [{tags_context}].
         Output JSON format: {{"summary": "...", "keywords": []}}
         """
@@ -59,7 +59,7 @@ def llm_analyze(text: str, existing_tags: list, mode: str = "both") -> dict:
         """
     else:  # both
         prompt = f"""Analyze this paper.
-        1. Summarize in Chinese.
+        1. Detailed Summarize in Chinese.
         2. 5-8 English keywords.
         Rules: Use existing tags if possible: [{tags_context}]. No 'A+B' compound tags.
         Output JSON format: {{"summary": "...", "keywords": ["...", "..."]}}

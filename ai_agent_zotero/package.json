@@ -1,7 +1,7 @@
 {
   "name": "zotero-ai-agent",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Zotero Plugin for AI-powered PDF analysis with HTTPS support",
   "config": {
     "addonName": "AIAgent",

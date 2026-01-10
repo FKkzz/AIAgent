@@ -4,6 +4,7 @@
 // @ts-nocheck
 export type FluentMessageId =
   | 'ai-analyze-pdf'
+  | 'ai-item-type-not-supported'
   | 'ai-processing'
   | 'ai-processing-complete'
   | 'ai-processing-error'

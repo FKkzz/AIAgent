@@ -108,6 +108,38 @@ async function registerRightClickMenuItem() {
 }
 
 /**
+ * Wait for items to be fully ready in Zotero before processing
+ */
+async function waitForItemsToBeReady(itemIds: number[], maxRetries: number = 10, delay: number = 100) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const items = await Zotero.Items.getAsync(itemIds);
+      const allItemsReady = items.every((item: any) => {
+        if (!item) return false;
+        // Check if it's an attachment and if it has a valid file path
+        if (item.isAttachment()) {
+          const filePath = item.getFilePath();
+          return filePath !== null && typeof filePath !== 'undefined';
+        }
+        return true; // Non-attachments are considered ready
+      });
+
+      if (allItemsReady) {
+        ztoolkit.log("All items are ready for processing");
+        return;
+      }
+    } catch (error) {
+      ztoolkit.log("Error checking item readiness:", error);
+    }
+
+    // Wait before next check
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  ztoolkit.log(`Items not ready after ${maxRetries} attempts, proceeding anyway`);
+}
+
+/**
  * This function is just an example of dispatcher for Notify events.
  * Any operations should be placed in a function to keep this funcion clear.
  */
@@ -125,35 +157,57 @@ async function onNotify(
     extraData[ids[0]].type == "reader"
   ) {
     BasicExampleFactory.exampleNotifierCallback();
-  } else if ((event === "add" || event === "modify") && (type === "item" || type === "collection-item")) {
-    // Handle new item added or modified - specifically look for PDF attachments
+  } else if (event === "add" && type === "item") {
+    // Handle new item added - specifically look for PDF attachments
     (async () => {
       try {
+        // Wait for Zotero to fully process the item before proceeding
+        await waitForItemsToBeReady(ids as number[]);
+        
         const items = await Zotero.Items.getAsync(ids as number[]);
         for (const item of items) {
           if (item && item.isAttachment() && item.attachmentContentType === "application/pdf") {
-            // Only process if it's a PDF attachment
-            ztoolkit.log("Processing new or modified PDF attachment:", item.getFilePath());
+            // Only process if it's a PDF attachment that was newly added
+            ztoolkit.log("Processing new PDF attachment:", item.getFilePath());
             await PDFAnalyzer.processPDFItem(item);
           }
         }
       } catch (error) {
-        ztoolkit.log("Error in onNotify when processing new or modified PDFs:", error);
+        ztoolkit.log("Error in onNotify when processing new PDFs:", error);
       }
     })();
-  } else if (event === "add" && type === "file") {
-    // Handle file events which might occur during drag-and-drop
+  } else if (event === "modify" && type === "item") {
+    // Handle item modification - specifically look for PDF attachments that now have a parent
+    // Only process if the modification involves linking a PDF to a parent item
+    // We'll check if the modification includes a change in parentItemID for PDF attachments
     (async () => {
       try {
+        // Wait for Zotero to fully process the modification before proceeding
+        await waitForItemsToBeReady(ids as number[]);
+        
         const items = await Zotero.Items.getAsync(ids as number[]);
         for (const item of items) {
           if (item && item.isAttachment() && item.attachmentContentType === "application/pdf") {
-            ztoolkit.log("Processing PDF file event:", item.getFilePath());
-            await PDFAnalyzer.processPDFItem(item);
+            // Check if this PDF attachment now has a parent item AND it hasn't been processed yet
+            // We'll use the PDFAnalyzer's internal tracking to avoid duplicate processing
+            const parentItem = item.parentItem;
+            if (parentItem) {
+              // Check if this PDF has already been processed by looking at whether it has AI-generated notes or tags
+              const hasAISummary = parentItem.getNotes().some((noteId: any) => {
+                const note = Zotero.Items.get(noteId);
+                return note && note.getNote().includes("AI Summary");
+              });
+              
+              if (!hasAISummary) {
+                ztoolkit.log("Processing PDF attachment with new parent item:", item.getFilePath(), "Parent ID:", parentItem.id);
+                
+                await PDFAnalyzer.processPDFItem(item);
+              }
+            }
           }
         }
       } catch (error) {
-        ztoolkit.log("Error in onNotify when processing PDF file events:", error);
+        ztoolkit.log("Error in onNotify when processing modified PDFs:", error);
       }
     })();
   } else {
@@ -180,3 +234,4 @@ export default {
   onNotify,
   onPrefsLoad,
 };
+
