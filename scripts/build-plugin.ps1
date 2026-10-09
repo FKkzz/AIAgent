@@ -1,0 +1,79 @@
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$pluginDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "plugin"))
+$distDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "dist"))
+
+if (-not $pluginDir.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Plugin directory resolved outside the repository: $pluginDir"
+}
+if (-not $distDir.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Distribution directory resolved outside the repository: $distDir"
+}
+
+$requiredFiles = @(
+    "manifest.json",
+    "bootstrap.js",
+    "prefs.js",
+    "locale/en-US/zotero-quick-read.ftl",
+    "locale/zh-CN/zotero-quick-read.ftl"
+)
+foreach ($relativePath in $requiredFiles) {
+    $candidate = Join-Path $pluginDir $relativePath
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "Required plugin file is missing: $relativePath"
+    }
+}
+
+$manifest = Get-Content -LiteralPath (Join-Path $pluginDir "manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($manifest.version -ne "0.1.0") {
+    throw "Expected plugin version 0.1.0, found '$($manifest.version)'"
+}
+if ($manifest.applications.zotero.strict_min_version -ne "9.0.6" -or
+    $manifest.applications.zotero.strict_max_version -ne "9.0.*") {
+    throw "manifest.json must target Zotero 9.0.6 through 9.0.*"
+}
+
+New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+$archiveBase = "zotero-quick-read-$($manifest.version)"
+$temporaryZip = Join-Path $distDir "$archiveBase.zip"
+$outputXpi = Join-Path $distDir "$archiveBase.xpi"
+
+foreach ($path in @($temporaryZip, $outputXpi)) {
+    $resolvedCandidate = [System.IO.Path]::GetFullPath($path)
+    if (-not $resolvedCandidate.StartsWith($distDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a build artifact outside dist: $resolvedCandidate"
+    }
+    if (Test-Path -LiteralPath $resolvedCandidate) {
+        Remove-Item -LiteralPath $resolvedCandidate -Force
+    }
+}
+
+Compress-Archive -Path (Join-Path $pluginDir "*") -DestinationPath $temporaryZip -CompressionLevel Optimal
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($temporaryZip)
+try {
+    $entries = @($zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") })
+    foreach ($requiredPath in $requiredFiles) {
+        if ($entries -notcontains $requiredPath) {
+            throw "Archive is missing root entry '$requiredPath'"
+        }
+    }
+    if ($entries | Where-Object { $_ -like "plugin/*" -or $_ -match "^[A-Za-z]:" -or $_.StartsWith("/") }) {
+        throw "Archive contains an invalid enclosing or absolute path"
+    }
+}
+finally {
+    $zip.Dispose()
+}
+
+Move-Item -LiteralPath $temporaryZip -Destination $outputXpi
+$hash = (Get-FileHash -LiteralPath $outputXpi -Algorithm SHA256).Hash.ToLowerInvariant()
+$hashFile = "$outputXpi.sha256"
+Set-Content -LiteralPath $hashFile -Value "$hash  $([IO.Path]::GetFileName($outputXpi))" -Encoding ascii
+Write-Output "Built $outputXpi"
+Write-Output "SHA256 $hash"

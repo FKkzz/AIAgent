@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install backend
+        run: python -m pip install -e ".\backend[dev]"
+      - name: Test backend and plugin source
+        run: python -m pytest backend\tests
+      - name: Lint
+        run: python -m ruff check backend
+      - name: Build XPI
+        shell: powershell
+        run: .\scripts\build-plugin.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zotero-quick-read-xpi
+          path: dist/zotero-quick-read-0.1.0.xpi

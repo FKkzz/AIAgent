@@ -1,0 +1,42 @@
+# Local credentials and settings
+.env
+.env.*
+!.env.example
+*.token
+*.secrets
+credentials*.json
+settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+*.egg-info/
+backend/build/
+backend/dist/
+
+# JavaScript / Zotero build products
+node_modules/
+plugin/build/
+*.xpi
+
+# Runtime and generated output
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+dist/*
+!dist/.gitkeep
+!dist/*.xpi
+!dist/*.xpi.sha256
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

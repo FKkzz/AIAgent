@@ -1,0 +1,96 @@
+{
+  "version": "1.0.0",
+  "terms": [
+    {
+      "canonical": "TRKR",
+      "category": "method",
+      "synonyms": [
+        "time-resolved Kerr rotation",
+        "time resolved Kerr rotation",
+        "时间分辨 Kerr 旋转",
+        "时间分辨克尔旋转",
+        "trkr"
+      ]
+    },
+    {
+      "canonical": "TRFR",
+      "category": "method",
+      "synonyms": [
+        "time-resolved Faraday rotation",
+        "time resolved Faraday rotation",
+        "时间分辨 Faraday 旋转",
+        "时间分辨法拉第旋转",
+        "trfr"
+      ]
+    },
+    {
+      "canonical": "瞬态吸收光谱",
+      "category": "method",
+      "synonyms": [
+        "transient absorption spectroscopy",
+        "pump-probe absorption",
+        "泵浦探测吸收光谱"
+      ]
+    },
+    {
+      "canonical": "时间分辨反射率",
+      "category": "method",
+      "synonyms": [
+        "time-resolved reflectivity",
+        "transient reflectivity",
+        "delta R over R"
+      ]
+    },
+    {
+      "canonical": "时间分辨光致发光",
+      "category": "method",
+      "synonyms": [
+        "time-resolved photoluminescence",
+        "TRPL",
+        "时间分辨荧光"
+      ]
+    },
+    {
+      "canonical": "二维材料",
+      "category": "material",
+      "synonyms": [
+        "two-dimensional material",
+        "2D material",
+        "层状二维材料"
+      ]
+    },
+    {
+      "canonical": "激子动力学",
+      "category": "physics",
+      "synonyms": [
+        "exciton dynamics",
+        "exciton kinetics",
+        "激子动理学"
+      ]
+    },
+    {
+      "canonical": "自旋动力学",
+      "category": "physics",
+      "synonyms": [
+        "spin dynamics",
+        "spin kinetics"
+      ]
+    },
+    {
+      "canonical": "相干声子",
+      "category": "physics",
+      "synonyms": [
+        "coherent phonon",
+        "coherent lattice vibration"
+      ]
+    },
+    {
+      "canonical": "超快动力学",
+      "category": "physics",
+      "synonyms": [
+        "ultrafast dynamics",
+        "femtosecond dynamics"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "addons": {
+    "zotero-quick-read@fkkzz.github.io": {
+      "updates": [
+        {
+          "version": "0.1.0",
+          "update_link": "https://raw.githubusercontent.com/FKkzz/AIAgent/main/dist/zotero-quick-read-0.1.0.xpi",
+          "update_hash": "sha256:a765f027c97a48a5129699713570e230c30e35355bed23c06b6f62156994d6d3",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "9.0.6",
+              "strict_max_version": "9.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

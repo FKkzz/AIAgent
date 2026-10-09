@@ -1,8 +1,0 @@
-{
-  "extends": "zotero-types/entries/sandbox/",
-  "compilerOptions": {
-    "lib": ["ES2015", "DOM"]
-  },
-  "include": ["src", "typings"],
-  "exclude": ["build", "addon"]
-}

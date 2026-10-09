@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero 论文 AI 速读",
+  "version": "0.1.0",
+  "description": "将新就绪的 PDF 提交给本机 Zotero Quick Read 后台，并安全写回子笔记与标签。",
+  "homepage_url": "https://github.com/FKkzz/AIAgent",
+  "applications": {
+    "zotero": {
+      "id": "zotero-quick-read@fkkzz.github.io",
+      "update_url": "https://raw.githubusercontent.com/FKkzz/AIAgent/main/updates.json",
+      "strict_min_version": "9.0.6",
+      "strict_max_version": "9.0.*"
+    }
+  }
+}
