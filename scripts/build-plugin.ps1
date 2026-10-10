@@ -29,8 +29,8 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $manifest = Get-Content -LiteralPath (Join-Path $pluginDir "manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($manifest.version -ne "2.0.1") {
-    throw "Expected plugin version 2.0.1, found '$($manifest.version)'"
+if ($manifest.version -ne "2.0.2") {
+    throw "Expected plugin version 2.0.2, found '$($manifest.version)'"
 }
 if ($manifest.applications.zotero.strict_min_version -ne "9.0.6" -or
     $manifest.applications.zotero.strict_max_version -ne "9.0.*") {
@@ -52,15 +52,67 @@ foreach ($path in @($temporaryZip, $outputXpi)) {
     }
 }
 
-Compress-Archive -Path (Join-Path $pluginDir "*") -DestinationPath $temporaryZip -CompressionLevel Optimal
-
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zipStream = [System.IO.File]::Open(
+    $temporaryZip,
+    [System.IO.FileMode]::CreateNew,
+    [System.IO.FileAccess]::Write,
+    [System.IO.FileShare]::None
+)
+$buildZip = [System.IO.Compression.ZipArchive]::new(
+    $zipStream,
+    [System.IO.Compression.ZipArchiveMode]::Create,
+    $false
+)
+$archiveTimestamp = [System.DateTimeOffset]::new(
+    2000, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero
+)
+try {
+    # Zotero discovers Fluent resources by enumerating locale directories in the
+    # XPI. Compress-Archive omits directory entries, which makes valid .ftl files
+    # invisible to Zotero 9.0.6 even though the files themselves are present.
+    foreach ($directory in Get-ChildItem -LiteralPath $pluginDir -Directory -Recurse | Sort-Object FullName) {
+        $relativeDirectory = $directory.FullName.Substring($pluginDir.Length).TrimStart([char[]]"\/")
+        $relativeDirectory = $relativeDirectory.Replace("\", "/") + "/"
+        $directoryEntry = $buildZip.CreateEntry($relativeDirectory)
+        $directoryEntry.LastWriteTime = $archiveTimestamp
+    }
+    foreach ($file in Get-ChildItem -LiteralPath $pluginDir -File -Recurse | Sort-Object FullName) {
+        $relativeFile = $file.FullName.Substring($pluginDir.Length).TrimStart([char[]]"\/")
+        $relativeFile = $relativeFile.Replace("\", "/")
+        $fileEntry = $buildZip.CreateEntry(
+            $relativeFile,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        )
+        $fileEntry.LastWriteTime = $archiveTimestamp
+        $sourceStream = [System.IO.File]::OpenRead($file.FullName)
+        $entryStream = $fileEntry.Open()
+        try {
+            $sourceStream.CopyTo($entryStream)
+        }
+        finally {
+            $entryStream.Dispose()
+            $sourceStream.Dispose()
+        }
+    }
+}
+finally {
+    $buildZip.Dispose()
+    $zipStream.Dispose()
+}
+
 $zip = [System.IO.Compression.ZipFile]::OpenRead($temporaryZip)
 try {
     $entries = @($zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") })
     foreach ($requiredPath in $requiredFiles) {
         if ($entries -notcontains $requiredPath) {
             throw "Archive is missing root entry '$requiredPath'"
+        }
+    }
+    foreach ($requiredDirectory in @("locale/", "locale/en-US/", "locale/zh-CN/")) {
+        if ($entries -notcontains $requiredDirectory) {
+            throw "Archive is missing directory entry '$requiredDirectory' required for Fluent discovery"
         }
     }
     if ($entries | Where-Object { $_ -like "plugin/*" -or $_ -match "^[A-Za-z]:" -or $_.StartsWith("/") }) {

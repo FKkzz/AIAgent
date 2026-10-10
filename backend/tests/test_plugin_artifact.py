@@ -10,14 +10,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "plugin"
-XPI = ROOT / "dist" / "zotero-quick-read-2.0.1.xpi"
+XPI = ROOT / "dist" / "zotero-quick-read-2.0.2.xpi"
 
 
 def test_manifest_targets_installed_zotero_9():
     manifest = json.loads((PLUGIN / "manifest.json").read_text(encoding="utf-8"))
     zotero = manifest["applications"]["zotero"]
     assert manifest["manifest_version"] == 2
-    assert manifest["version"] == "2.0.1"
+    assert manifest["version"] == "2.0.2"
     assert zotero["strict_min_version"] == "9.0.6"
     assert zotero["strict_max_version"] == "9.0.*"
     assert zotero["update_url"].startswith("https://")
@@ -83,9 +83,17 @@ def test_built_xpi_has_required_files_at_archive_root():
     if not XPI.exists():
         pytest.skip("XPI has not been built")
     with zipfile.ZipFile(XPI) as archive:
-        names = set(archive.namelist())
+        entries = {entry.filename: entry for entry in archive.infolist()}
+        names = set(entries)
         assert "manifest.json" in names
         assert "bootstrap.js" in names
         assert "prefs.js" in names
+        assert "locale/" in names
+        assert "locale/en-US/" in names
+        assert "locale/zh-CN/" in names
+        assert entries["locale/"].is_dir()
+        assert entries["locale/en-US/"].is_dir()
+        assert entries["locale/zh-CN/"].is_dir()
+        assert {entry.date_time for entry in entries.values()} == {(2000, 1, 1, 0, 0, 0)}
         assert "locale/zh-CN/zotero-quick-read.ftl" in names
         assert not any(name.startswith("plugin/") for name in names)

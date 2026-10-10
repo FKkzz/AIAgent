@@ -2,14 +2,14 @@
 
 Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给本地后台处理，并在父文献条目下生成中文“AI 速读”子笔记和规范标签。
 
-当前维护版本：`2.0.1`。`2.0.0` 是替换旧软件的完整重构版；`2.0.1` 修复 Zotero 9.0.6 右键菜单与菜单文字显示问题。详见 [CHANGELOG.md](CHANGELOG.md)。
+当前维护版本：`2.0.2`。`2.0.0` 是替换旧软件的完整重构版；`2.0.2` 修复 Zotero 9.0.6 无法发现插件本地化资源、进而阻断右键菜单构建的问题。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 先认识三个文件
 
 | 文件 | 用途 |
 |---|---|
 | `dist/ZoteroQuickRead.exe` | Windows 本地后台。本机交付已生成；GitHub 源码仓库不保存 EXE |
-| `dist/zotero-quick-read-2.0.1.xpi` | 安装到 Zotero 的插件 |
+| `dist/zotero-quick-read-2.0.2.xpi` | 安装到 Zotero 的插件 |
 | `README.md` | 你正在阅读的使用教程 |
 
 默认后台地址是 `http://127.0.0.1:23120`。不要使用 Zotero Connector 占用的 `23119`。
@@ -172,13 +172,13 @@ Invoke-RestMethod http://127.0.0.1:23120/health
 
 ### 第 8 步：安装或升级 Zotero 插件
 
-安装文件位于项目目录的 `dist\zotero-quick-read-2.0.1.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.0.1.xpi`。
+安装文件位于项目目录的 `dist\zotero-quick-read-2.0.2.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.0.2.xpi`。
 
 1. 打开 Zotero。
 2. 进入“工具 → 插件”。
 3. 点击右上角齿轮。
 4. 选择“从文件安装插件”。
-5. 选择 `zotero-quick-read-2.0.1.xpi`。
+5. 选择 `zotero-quick-read-2.0.2.xpi`。
 6. 如果已安装旧版，确认替换，然后完整退出并重新打开 Zotero。
 
 插件默认读取 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token`，通常不需要手工复制 Token。
@@ -230,7 +230,7 @@ cd D:\CodeWorkspace\AIAgent
 
 ### 启用插件后右键无反应，或“查看”等菜单文字缺失
 
-这是 2.0.0 基线包的 Fluent 菜单标签兼容问题，已在 2.0.1 修复。重新安装 `dist/zotero-quick-read-2.0.1.xpi`，然后完整重启 Zotero。若问题仍在，先禁用其他插件做一次隔离验证，并查看 [docs/TESTING.md](docs/TESTING.md)。
+2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。重新安装 `dist/zotero-quick-read-2.0.2.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
 
 ### `unsupported_country_region_territory`
 

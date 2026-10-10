@@ -83,6 +83,27 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			"zqr-status-unknown": "Unknown status",
 			"zqr-status-backend-unavailable": "Backend status could not be refreshed; showing cached data: {error}",
 		};
+		const chineseMenuFallbackStrings = {
+			"zqr-menu-root": "Zotero 论文 AI 速读",
+			"zqr-menu-generate": "生成 AI 速读",
+			"zqr-menu-regenerate": "重新生成",
+			"zqr-menu-status": "查看状态",
+			"zqr-menu-settings": "设置",
+		};
+
+		function menuFallbackString(id) {
+			const locale = String(Zotero.locale || Services.locale.appLocaleAsBCP47 || "").toLowerCase();
+			const chinese = locale.startsWith("zh");
+			if (id === "zqr-menu-auto") {
+				const enabled = getBoolPref("autoProcess", false);
+				return chinese
+					? `自动处理：${enabled ? "开启" : "关闭"}`
+					: `Automatic processing: ${enabled ? "On" : "Off"}`;
+			}
+			return (chinese ? chineseMenuFallbackStrings[id] : null)
+				|| fallbackStrings[id]
+				|| id;
+		}
 
 		function newState() {
 			return {
@@ -450,7 +471,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				try {
 					const menuElem = context?.menuElem;
 					if (menuElem && !menuElem.getAttribute("label")) {
-						menuElem.setAttribute("label", fallbackStrings[labelID] || labelID);
+						menuElem.setAttribute("label", menuFallbackString(labelID));
 					}
 					handler?.(event, context);
 				}
@@ -1271,6 +1292,52 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			Services.prompt.alert(window || null, title, lines.join("\n"));
 		}
 
+		function scheduleMenuProbe() {
+			if (Services.env.get("ZOTERO_QUICK_READ_MENU_PROBE") !== "1") {
+				return;
+			}
+			const epoch = runtime.epoch;
+			const timer = setTimeout(async () => {
+				runtime.otherTimers.delete(timer);
+				if (!runtime.started || runtime.epoch !== epoch) {
+					return;
+				}
+				try {
+					const window = Zotero.getMainWindow();
+					const popup = window?.document?.getElementById("zotero-itemmenu");
+					if (!window?.ZoteroPane || !popup) {
+						throw new Error("The item context menu is unavailable");
+					}
+					await window.ZoteroPane.buildItemContextMenu();
+					await Zotero.Promise.delay(250);
+					popup.dispatchEvent(new window.Event("popupshowing"));
+					await Zotero.Promise.delay(250);
+					const root = popup.querySelector('[data-l10n-id="zqr-menu-root"]');
+					const subPopup = root?.querySelector("menupopup");
+					if (subPopup) {
+						subPopup.dispatchEvent(new window.Event("popupshowing"));
+						await Zotero.Promise.delay(250);
+					}
+					const entries = Array.from(popup.querySelectorAll(".zotero-custom-menu-item"))
+						.map(element => ({
+							node: element.localName,
+							label: element.getAttribute("label"),
+							l10nID: element.dataset.l10nId || "",
+							hidden: element.hidden,
+							disabled: element.disabled,
+						}));
+					Zotero.debug(`${ADDON_ID}: menu probe ${JSON.stringify({
+						childCount: popup.children.length,
+						entries,
+					})}`);
+				}
+				catch (error) {
+					Zotero.logError(new Error(`${ADDON_ID}: menu probe failed: ${safeError(error)}`));
+				}
+			}, 2500);
+			runtime.otherTimers.add(timer);
+		}
+
 		function scheduleStartupSync() {
 			const epoch = runtime.epoch;
 			const timer = setTimeout(async () => {
@@ -1319,6 +1386,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				registerMenu();
 				registerNotifier();
 				scheduleStartupSync();
+				scheduleMenuProbe();
 				Zotero.debug(`${ADDON_ID}: started`);
 			}
 			catch (error) {

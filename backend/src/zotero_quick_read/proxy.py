@@ -149,5 +149,5 @@ def requests_session(
     else:
         # Explicitly empty, combined with trust_env=False, means direct access.
         session.proxies.clear()
-    session.headers.update({"User-Agent": "ZoteroQuickRead/2.0.1"})
+    session.headers.update({"User-Agent": "ZoteroQuickRead/2.0.2"})
     return session

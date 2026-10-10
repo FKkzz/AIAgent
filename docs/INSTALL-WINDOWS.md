@@ -74,7 +74,7 @@ Invoke-RestMethod http://127.0.0.1:23120/health
 ## Zotero 插件问题
 
 - 确认 Zotero 是 9.0.6–9.0.x。
-- 重新安装 `dist/zotero-quick-read-2.0.1.xpi`，并重启 Zotero。
+- 重新安装 `dist/zotero-quick-read-2.0.2.xpi`，并重启 Zotero。
 - 后台先运行，插件再连接。
 - 插件 token 默认自动读取；如 401，执行 `token-path` 检查文件位置，再在插件设置中重新载入或手工输入。
 - 只读组库不会写入笔记或标签，并显示明确错误。
