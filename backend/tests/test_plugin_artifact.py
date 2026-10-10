@@ -10,13 +10,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "plugin"
-XPI = ROOT / "dist" / "zotero-quick-read-0.1.0.xpi"
+XPI = ROOT / "dist" / "zotero-quick-read-2.0.1.xpi"
 
 
 def test_manifest_targets_installed_zotero_9():
     manifest = json.loads((PLUGIN / "manifest.json").read_text(encoding="utf-8"))
     zotero = manifest["applications"]["zotero"]
     assert manifest["manifest_version"] == 2
+    assert manifest["version"] == "2.0.1"
     assert zotero["strict_min_version"] == "9.0.6"
     assert zotero["strict_max_version"] == "9.0.*"
     assert zotero["update_url"].startswith("https://")
@@ -36,6 +37,33 @@ def test_plugin_uses_dedicated_loopback_port_and_safe_zotero_apis():
     assert "errorDelayMax: 0" in bootstrap
     assert "autoSince" in bootstrap
     assert "backend-api" not in bootstrap
+
+
+def test_menu_localization_uses_xul_label_attributes_and_safe_hooks():
+    bootstrap = (PLUGIN / "bootstrap.js").read_text(encoding="utf-8")
+    for locale in ("en-US", "zh-CN"):
+        messages = (PLUGIN / "locale" / locale / "zotero-quick-read.ftl").read_text(
+            encoding="utf-8"
+        )
+        for message_id in (
+            "zqr-menu-root",
+            "zqr-menu-generate",
+            "zqr-menu-regenerate",
+            "zqr-menu-status",
+            "zqr-menu-settings",
+            "zqr-menu-auto",
+        ):
+            lines = messages.splitlines()
+            start = lines.index(f"{message_id} =")
+            block_lines = []
+            for line in lines[start + 1 :]:
+                if line and not line[0].isspace():
+                    break
+                block_lines.append(line)
+            block = "\n".join(block_lines)
+            assert ".label =" in block
+    assert "const safeShowing" in bootstrap
+    assert "plugin callback abort construction of Zotero's native menus" in bootstrap
 
 
 def test_bootstrap_javascript_syntax():

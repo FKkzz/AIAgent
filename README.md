@@ -1,73 +1,74 @@
-# Zotero Quick Read（Zotero 论文自动速读）
+# Zotero 论文 AI 速读
 
-一个面向 Windows 与 Zotero 9 的本地工具：PDF 就绪后，通过官方 OpenAI 接口生成中文物理论文速读，在父文献下创建子笔记，并增量添加规范检索标签。
+Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给本地后台处理，并在父文献条目下生成中文“AI 速读”子笔记和规范标签。
 
-项目由两个部分组成：
+当前维护版本：`2.0.1`。`2.0.0` 是替换旧软件的完整重构版；`2.0.1` 修复 Zotero 9.0.6 右键菜单与菜单文字显示问题。详见 [CHANGELOG.md](CHANGELOG.md)。
 
-- Zotero 9 插件：右键处理、自动监听、任务状态、子笔记和标签写回。
-- 仅监听 loopback 的本地后台：SOCKS、Sign in with ChatGPT、PDF 按页提取、模型调用、持久队列、结果校验和缓存。
+## 先认识三个文件
 
-当前版本：`0.1.0`。默认后台地址是 `http://127.0.0.1:23120`。没有使用 Zotero 自带 Connector 占用的 `23119` 端口。
+| 文件 | 用途 |
+|---|---|
+| `dist/ZoteroQuickRead.exe` | Windows 本地后台。本机交付已生成；GitHub 源码仓库不保存 EXE |
+| `dist/zotero-quick-read-2.0.1.xpi` | 安装到 Zotero 的插件 |
+| `README.md` | 你正在阅读的使用教程 |
 
-## 已实现功能
+默认后台地址是 `http://127.0.0.1:23120`。不要使用 Zotero Connector 占用的 `23119`。
 
-- 官方 Sign in with ChatGPT 开源本地应用流程：动态注册、稳定 host ID、PKCE、state、nonce、JWKS/ID token 校验、scope 检查、旋转 refresh token、撤销。
-- ChatGPT plan usage 与普通 API Key 两种显式模式；两者绝不自动互相回退。
-- SOCKS 4/4a/5/5h，支持用户名/密码和本机/代理端 DNS；所有 OpenAI 外部请求使用同一个显式代理 transport。
-- Firefox 只负责交互式授权页；OAuth 回调和插件通信均直连 loopback。
-- Windows CurrentUser DPAPI 保护 OAuth token、API Key 和代理密码。
-- PDF 全文逐页提取、真实页码标记、图注保留、长文分段、不静默截断、选取图像密集页作为内联图像输入。
-- 扫描件、加密件、空文本、超大文件和流中断均产生明确失败状态。
-- 固定 JSON Schema 校验；只有收到 `response.completed` 且结构验证成功后才生成正式笔记结果。
-- SQLite WAL 持久队列：去重、取消、有限重试、单任务并发、重启恢复、额度等待和重新授权状态。
-- Zotero 右键菜单：生成、重新生成、查看状态、设置、自动处理开关。
-- 自动模式只处理启用后的事件，记录启用时间，不扫描整个历史库；PDF 尚未落盘时有限重试。
-- 只使用 Zotero 支持的数据 API 创建子笔记和增量标签，不修改 Zotero SQLite。
-- 人工标签不会被删除；人工编辑过的 AI 笔记不会被静默覆盖，重新生成时保留旧笔记并另建新笔记。
-- 本地 API Bearer token、Host/Origin 校验、固定 HTML 白名单和模型内容不可信输入边界。
+## 使用前准备
 
-## 官方接口核实结果（2026-10-09）
+- Windows 10/11 64 位。
+- Zotero 9.0.6–9.0.x。
+- Firefox，用于本人完成 OpenAI 官方授权。
+- 如网络需要代理，准备 Firefox 当前使用的 SOCKS 版本、主机和端口。
+- 在 Zotero 中，论文必须已有下载完成的本地 PDF 附件。
+- 只有从 GitHub 源码开始构建时，才需要额外安装 Git 和 Python 3.11 或更高版本；已经拿到本机完整交付目录时不需要。
 
-实现以当前 OpenAI Docs 为准：
+下面所有命令都在 PowerShell 中执行。带 `<...>` 的文字必须替换，不能原样复制。
 
-- 本地个人/开源项目属于 ChatGPT plan usage 的适用场景，但 Plus/Pro 账号仍须以实际授权和返回 scope 为准，不能仅凭订阅名称保证可用。
-- 首次使用 `dynamic_agent_client` 注册，保存回调返回的 issued `client_id`；后续复用该 ID。
-- 套餐路线使用公开的 `POST https://api.openai.com/v1/responses`，要求 `store=false`、`stream=true`，不使用 ChatGPT 私有 `backend-api`。
-- 模型由当前账号的 `/v1/models` 返回值生成，不硬编码型号。
-- 当前文档已明确：所选模型支持时可发送内联文本、图像和文件；但该路线仍不支持 Files 上传 API。本项目使用本地按页文本与必要页面图像，不调用 Files 上传。
-- 套餐路线当前不支持 `max_output_tokens` 等一组普通 API 参数，长度目标通过阅读指令和结果校验控制。
-- Plus 的五小时用量窗口在使用 ChatGPT plan 的应用间共享，还可能有 app-specific limit；本项目不承诺固定论文篇数，也不绕过限制。
+## 第一次使用：从零到成功
 
-官方依据：
+### 第 1 步：进入项目目录
 
-- [Sign in with ChatGPT 概览](https://developers.openai.com/siwc/token-sharing-open-source)
-- [注册与登录](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
-- [账号、刷新与用量](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
-- [模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
-- [Preview 限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
-- [官方集成文章](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt)
+如果你正在使用本机已经构建好的完整交付，打开 PowerShell，执行：
 
-## 快速安装（Windows）
+```powershell
+cd D:\CodeWorkspace\AIAgent
+```
 
-### 1. 初始化后台
+如果是第一次从 GitHub 获取源码，可以在 GitHub 页面点击 `Code → Download ZIP` 并解压；也可以安装 Git 后执行：
 
-本次 Windows 本机交付已生成 `dist/ZoteroQuickRead.exe`。EXE 属于本机构建产物，不提交进源码仓库；从 GitHub 克隆后可先运行 `scripts/build-backend.ps1` 重新生成。随后在仓库根目录打开 PowerShell：
+```powershell
+cd <你希望保存项目的目录>
+git clone https://github.com/FKkzz/AIAgent.git
+cd .\AIAgent
+```
+
+GitHub 源码仓库不保存 Windows EXE。仅源码用户还要确认 `python --version` 显示 3.11 或更高版本，然后执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-backend.ps1
+```
+
+看到 `Built ...\dist\ZoteroQuickRead.exe` 后再继续。下载 ZIP 的用户也应先在 PowerShell 中 `cd` 到解压后的项目目录，再运行上面两条构建命令。
+
+### 第 2 步：初始化后台
 
 ```powershell
 .\dist\ZoteroQuickRead.exe init
 ```
 
-也可以从源码安装：
+程序会在 `%LOCALAPPDATA%\ZoteroQuickRead\` 创建设置、加密凭据、任务队列和插件认证文件。重复执行不会删除已有登录或任务。
+
+### 第 3 步：配置 SOCKS 代理
+
+如果以前已经填写过代理，只是尚未启用：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1
+.\dist\ZoteroQuickRead.exe configure --proxy on
 ```
 
-运行时数据默认位于 `%LOCALAPPDATA%\ZoteroQuickRead\`，不在仓库中。
-
-### 2. 配置 SOCKS
-
-请把示例值替换为 Firefox 实际使用的 SOCKS 参数：
+第一次配置时，把示例端口替换成 Firefox 的真实 SOCKS 端口：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe configure `
@@ -79,79 +80,227 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-backend.ps
   --firefox-path "C:\Program Files\Mozilla Firefox\firefox.exe"
 ```
 
-如有代理密码，使用交互式输入，避免密码进入命令历史：
+`--proxy-dns proxy` 表示域名也由代理端解析，对应 `socks5h` 或 `socks4a`。如果代理需要用户名和密码：
 
 ```powershell
+.\dist\ZoteroQuickRead.exe configure --proxy-username "<用户名>"
 .\dist\ZoteroQuickRead.exe configure --set-proxy-password
 ```
 
-`--proxy-dns proxy` 会使用 `socks5h`/`socks4a`，域名由代理端解析；`local` 使用 `socks5`/`socks4`。
+第二条命令会安全地交互输入密码，不让密码进入 PowerShell 历史。如果所在网络可以直接访问 OpenAI：
 
-### 3. 分层诊断并登录
+```powershell
+.\dist\ZoteroQuickRead.exe configure --proxy off
+```
+
+验证网络路径：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe diagnose
+```
+
+启用代理时，登录前至少应看到：
+
+```text
+proxy_configuration  ok
+proxy_tcp            ok
+oidc_and_jwks         ok
+```
+
+首次尚未登录时，最后出现 `reauthorization_required` 是正常现象。
+
+### 第 4 步：登录 ChatGPT
+
+```powershell
 .\dist\ZoteroQuickRead.exe auth-login
 ```
 
-`auth-login` 会启动随机端口的 `127.0.0.1/auth/callback` 监听器，并在配置的 Firefox 中打开 OpenAI 官方授权页。请本人完成登录并同意 ChatGPT plan usage；浏览器登录不能由程序代替。
+程序会在配置的 Firefox 中打开 OpenAI 官方授权页。请本人登录并同意 ChatGPT plan usage。浏览器显示完成后回到 PowerShell，再检查：
 
-登录后读取账号模型目录并选择一个返回的模型 ID：
+```powershell
+.\dist\ZoteroQuickRead.exe auth-status
+```
+
+成功结果应包含 `signed_in: true` 和 `chatgpt.tokens.use.direct`。账号是否具备套餐调用权限，以 OpenAI 实际授权结果为准。
+
+### 第 5 步：选择模型
+
+读取账号实际可用的模型：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe models
-.\dist\ZoteroQuickRead.exe configure --model "<models 返回的 id>"
+```
+
+每个模型会返回 `id` 和 `display_name`。配置时必须复制区分大小写的 `id`，不要复制显示名称。例如列表中若出现：
+
+```json
+{
+  "id": "gpt-6.1-sol",
+  "display_name": "GPT-6.1-Sol"
+}
+```
+
+正确命令是：
+
+```powershell
+.\dist\ZoteroQuickRead.exe configure --model "gpt-6.1-sol"
+```
+
+错误示例是 `--model "GPT-6.1-Sol"`；它是显示名称，可能返回 HTTP 400。
+
+### 第 6 步：完成最小推理验收
+
+```powershell
 .\dist\ZoteroQuickRead.exe diagnose --models --inference
 ```
 
-只有最后一步收到完整 `response.completed` 才表示阶段一真实联调成功。
+当 `models` 和 `inference` 均为 `status: ok` 时，代理、登录、套餐权限、模型目录和最小流式推理已经全部打通。
 
-### 4. 启动后台
+### 第 7 步：启动本地后台
 
 ```powershell
 .\dist\ZoteroQuickRead.exe serve
 ```
 
-或运行：
+保持这个 PowerShell 窗口打开。另开一个 PowerShell 可以检查：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1
+Invoke-RestMethod http://127.0.0.1:23120/health
 ```
 
-服务只绑定 `127.0.0.1:23120`。若修改端口，也要在 Zotero 插件“设置”菜单中修改相同地址。
+正常结果包含 `status: ok`。
 
-### 5. 安装 Zotero 插件
+### 第 8 步：安装或升级 Zotero 插件
 
-可安装文件：`dist/zotero-quick-read-0.1.0.xpi`。
+安装文件位于项目目录的 `dist\zotero-quick-read-2.0.1.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.0.1.xpi`。
 
-1. Zotero → 工具 → 插件。
-2. 点击齿轮 → Install Plugin From File / 从文件安装插件。
-3. 选择上述 XPI。
-4. 右键一篇带本地 PDF 的父文献，打开“AI 速读”子菜单。
+1. 打开 Zotero。
+2. 进入“工具 → 插件”。
+3. 点击右上角齿轮。
+4. 选择“从文件安装插件”。
+5. 选择 `zotero-quick-read-2.0.1.xpi`。
+6. 如果已安装旧版，确认替换，然后完整退出并重新打开 Zotero。
 
-插件默认从 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token` 自动读取本地 API token；该文件由后台初始化，并限制为当前 Windows 用户访问。如自动读取失败，可在插件“设置”中手工粘贴 token。
+插件默认读取 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token`，通常不需要手工复制 Token。
 
-## 单篇论文预览（阶段二）
+### 第 9 步：处理第一篇论文
 
-在写入 Zotero 前，可先处理一篇本地论文：
+1. 确认 Zotero 父文献条目下面已经有本地 PDF。
+2. 在中间文献列表中选中父文献条目。
+3. 右键，打开“Zotero 论文 AI 速读”。
+4. 点击“生成 AI 速读”。
+5. 通过“查看状态”观察排队、处理中和完成状态。
+
+完成后，父条目下会出现中文“AI 速读”子笔记，并增量添加通常 4–6 个标签。已有人工标签不会被删除。
+
+## 以后每天怎么用
+
+通常只需要先启动后台：
+
+```powershell
+cd D:\CodeWorkspace\AIAgent
+.\dist\ZoteroQuickRead.exe serve
+```
+
+保持窗口运行，再打开 Zotero：
+
+- “生成 AI 速读”：处理选中的论文。
+- “重新生成”：强制建立新任务。人工修改过的旧笔记会被保留。
+- “查看状态”：刷新并显示任务状态。
+- “设置”：检查后台地址和本地 Token。
+- “自动处理”：只监听启用之后新增或变化的 PDF，不会突然处理整个历史文库。
+
+## 先处理本地 PDF，不写入 Zotero
+
+建议第一次先做预览：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe read "D:\papers\paper.pdf" --title "论文题名"
 ```
 
-通过后会在 `%LOCALAPPDATA%\ZoteroQuickRead\previews\` 生成结构化 JSON 和 HTML 预览，并报告实际 usage。PDF 全文不会写入日志或队列数据库。
+结构化 JSON 和 HTML 预览位于：
 
-## Zotero 工作流（阶段三）
+```text
+%LOCALAPPDATA%\ZoteroQuickRead\previews\
+```
 
-- “生成 AI 速读”：处理选中文献的首选本地 PDF；同一父条目、附件指纹、指令版本、模型和认证模式会去重。
-- “重新生成”：强制创建新任务。原 AI 笔记未被人工修改时可安全更新；发现修改时保留旧笔记并创建新笔记。
-- “查看任务状态”：刷新后台并显示等待全文、排队、处理中、完成、失败、等待额度、重新授权或取消。
-- “自动处理”：从启用时刻开始监听 `add/modify/redraw`，不扫描历史库；只在 PDF 有父文献、文件存在且大小稳定后提交。
-- 标签采用 `addTag()` 增量添加，绝不使用 `setTags()` 覆盖现有人工标签。
+确认内容正常后，再从 Zotero 右键菜单生成正式笔记。
 
-阅读规则位于 [reading-instructions-v1.md](backend/src/zotero_quick_read/resources/reading-instructions-v1.md)，规范词表位于 [tag-vocabulary.json](backend/src/zotero_quick_read/resources/tag-vocabulary.json)。每次推理均显式加载版本化指令。
+## 常见问题
 
-## 普通 API Key 模式（可选、显式付费）
+### 启用插件后右键无反应，或“查看”等菜单文字缺失
+
+这是 2.0.0 基线包的 Fluent 菜单标签兼容问题，已在 2.0.1 修复。重新安装 `dist/zotero-quick-read-2.0.1.xpi`，然后完整重启 Zotero。若问题仍在，先禁用其他插件做一次隔离验证，并查看 [docs/TESTING.md](docs/TESTING.md)。
+
+### `unsupported_country_region_territory`
+
+先检查诊断中是否出现 `enabled: false` 或 `direct_configured`。如果应该使用 SOCKS：
+
+```powershell
+.\dist\ZoteroQuickRead.exe configure --proxy on
+.\dist\ZoteroQuickRead.exe diagnose
+```
+
+如果代理已经启用但仍返回地区错误，确认实际访问地区符合 OpenAI 当前支持范围。不要循环登录，也不要自动改用收费 API Key。
+
+### `OIDC/JWKS 连接失败`
+
+这表示后台网络路径没有打通，不是 Zotero 问题。检查 SOCKS 程序、主机、端口和 DNS 模式，然后重新运行 `diagnose`。
+
+### 模型显示在列表里，但推理返回 HTTP 400
+
+确认 `configure --model` 使用的是模型小写 `id`，而不是 `display_name`。重新执行：
+
+```powershell
+.\dist\ZoteroQuickRead.exe models
+.\dist\ZoteroQuickRead.exe configure --model "<精确的 id>"
+.\dist\ZoteroQuickRead.exe diagnose --models --inference
+```
+
+### 插件提示 401 或 Token 缺失
+
+```powershell
+.\dist\ZoteroQuickRead.exe token-path
+```
+
+确认后台已经执行 `init`，然后在 Zotero 的“AI 速读 → 设置”中重新读取，必要时再手工粘贴 Token。
+
+### PDF 没有生成结果
+
+- `waiting_fulltext`：PDF 尚未下载完成或仍在写入。
+- `scanned_or_empty_pdf`：扫描件或文本太少，需要先 OCR。
+- `encrypted_pdf`：需要先解除 PDF 加密。
+- `pdf_too_large` / `document_too_large`：文件或分段数量超过安全上限；程序不会静默截断。
+- 模型不支持页面图像时，可明确降级到纯文本：
+
+```powershell
+.\dist\ZoteroQuickRead.exe configure --page-images off
+```
+
+### 后台端口被占用
+
+不要使用 Zotero Connector 的 `23119`。选择其他 loopback 端口：
+
+```powershell
+.\dist\ZoteroQuickRead.exe configure --port <新端口>
+```
+
+随后在 Zotero 插件“设置”中填入相同地址。
+
+## 重新授权与退出
+
+```powershell
+.\dist\ZoteroQuickRead.exe auth-status
+.\dist\ZoteroQuickRead.exe auth-refresh
+.\dist\ZoteroQuickRead.exe auth-login
+.\dist\ZoteroQuickRead.exe auth-logout
+```
+
+`auth-logout` 会尝试撤销 refresh token；临时网络失败时不会误删本地凭据。
+
+## 可选的普通 API Key 模式
+
+这是显式付费模式，必须由用户主动选择：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe set-api-key
@@ -159,79 +308,72 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1
 .\dist\ZoteroQuickRead.exe models --auth-mode api_key
 ```
 
-API Key 由 DPAPI 保护。程序不会在套餐限额、权限错误或网络失败时自动切换到 API Key；切换必须由用户明确执行 `configure --auth-mode ...`。
+程序在套餐限额、权限错误或网络失败时不会自动切换到 API Key。切回套餐模式：
 
-ChatGPT plan 与关联 credits 的使用/限制在 ChatGPT Settings → Usage 管理。遇到套餐限额时任务进入 `waiting_quota`，不会新建身份或自动付费重试。
+```powershell
+.\dist\ZoteroQuickRead.exe configure --auth-mode chatgpt
+```
 
-## 数据与安全
+## 数据和安全
 
-- OAuth access/refresh/ID token、API Key 和代理密码保存在 DPAPI 加密的 `secrets.bin`。
-- Zotero 插件不会接触 OpenAI token，只持有 loopback 后台 token。
-- 后台拒绝非 loopback 客户端、异常 Host 和带浏览器 Origin 的请求。
-- 不抓取 Firefox Cookie，不复制其他应用 token，不调用私有网页接口。
-- 日志不记录 token、授权 URL、代理密码或论文全文。
-- 模型文本先经过 JSON Schema 与来源页码校验；笔记 HTML 由后端固定模板生成，并在插件中再次白名单清洗。
-- 旧项目中未提交的本地 `.env` 已删除，未复制到新代码或构建产物。
+- 后台只监听 `127.0.0.1`，并使用随机 Bearer Token 认证插件。
+- OAuth Token、API Key 和代理密码由 Windows CurrentUser DPAPI 加密保存在 `secrets.bin`。
+- Zotero 插件不会接触 OpenAI Token，只持有本机后台 Token。
+- 日志不记录 Token、授权 URL、代理密码或论文全文。
+- 正式笔记只在完整收到 `response.completed` 且结构与页码校验通过后写入。
+- 标签使用增量添加，不覆盖人工标签。
+- 发现 AI 笔记被人工修改后，重新生成会保留旧笔记并创建新笔记。
 
-更多说明见 [SECURITY.md](SECURITY.md)。
+运行数据默认位于 `%LOCALAPPDATA%\ZoteroQuickRead\`，不会提交到 GitHub，也不会进入 Zotero 同步数据。
 
-## 测试与当前验收状态
+## 阅读规则与标签词表
 
-已在本机完成：
+- 阅读指令：[reading-instructions-v1.md](backend/src/zotero_quick_read/resources/reading-instructions-v1.md)
+- 标签词表：[tag-vocabulary.json](backend/src/zotero_quick_read/resources/tag-vocabulary.json)
 
-- Python 自动测试：DPAPI、PKCE/state 防重放、refresh、SSE 任意分片/中断、额度/权限错误、SOCKS5 真实握手与代理端 DNS、队列去重/取消/恢复、PDF 多页/扫描件/超限、结构校验、loopback API。
-- JavaScript 语法、XPI 根目录结构和 Zotero 9 清单校验。
-- 独立 EXE 初始化、DPAPI 存储、`127.0.0.1:23120` 启动、健康检查和 Bearer 认证。
-- 本机 Zotero 9.0.6 隔离 profile 实际加载 XPI：插件记录为 `active=true`、`appDisabled=false`，未使用用户真实 Zotero 数据库。
+默认生成约 600–1000 个中文字，覆盖实验条件、主要结论、物理图像、核心卖点、来源页码和阅读覆盖范围。理论论文会改用模型、假设与可检验预测结构。
 
-尚需本人操作才能完成：
+## 开发、测试和重新构建
 
-- 真实 SOCKS 参数下的 OIDC/JWKS、token exchange、模型目录和最小推理联调。
-- 使用本人 ChatGPT 账号确认 `chatgpt.tokens.use.direct` 实际获批。
-- 用本人指定论文核对 600–1000 字笔记、页码证据、图像页和标签质量。
-- 在真实 Zotero 窗口中验证右键、多选、Connector 下载、同步按需下载、只读组库、人工编辑保护和实际写回。
-
-模拟测试不会被当成上述真实联调。详细矩阵见 [docs/TESTING.md](docs/TESTING.md)。
-
-## 常见故障
-
-- `proxy_tcp_failed`：代理进程、主机或端口不通。
-- `proxy_authentication_failed`：SOCKS 用户名/密码错误。
-- `oidc_failed`：代理虽可达，但 OpenAI OIDC/JWKS 请求失败；检查远程 DNS 和 TLS。
-- `chatgpt_plan_scope_missing`：身份登录成功，但未获套餐推理权限；重新授权并确认 consent。
-- `subscription_sharing_user_not_eligible`：账号/workspace/策略不适用，不能用重复 OAuth 伪装修复。
-- `subscription_sharing_usage_limit_exceeded`：套餐或 app-specific limit 已达；到 ChatGPT Settings → Usage 查看并等待。
-- `model_not_found`：重新执行 `models` 并选择账号实际返回的模型。
-- `stream_interrupted` / `response_incomplete`：不会写正式笔记，可有限重试。
-- `scanned_or_empty_pdf`：需要先 OCR；不会用摘要冒充全文。
-- `encrypted_pdf`：先解密 PDF。
-- 后台端口被占用：不要改回 Zotero Connector 的 23119；选择其他空闲 loopback 端口，并同步修改插件设置。
-
-完整 Windows 排错步骤见 [docs/INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md)。
-
-## 开发与构建
+从 GitHub 克隆后，先安装开发环境：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1
+```
+
+运行测试：
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
+```
+
+构建 XPI 和本机 EXE：
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-all.ps1
 ```
 
 源码结构：
 
 ```text
-backend/      Python 后台、资源与测试
+backend/      Python 后台、资源与自动测试
 plugin/       Zotero bootstrapped 插件
-scripts/      Windows 安装、测试和打包脚本
-docs/         安装、架构与验收文档
+scripts/      Windows 安装、测试与打包脚本
+docs/         安装、架构和验收文档
 dist/         已提交的 XPI，以及本机生成且不入库的 EXE
 ```
 
+更详细的设计和验收边界见 [架构说明](docs/ARCHITECTURE.md)、[Windows 安装说明](docs/INSTALL-WINDOWS.md)和[测试说明](docs/TESTING.md)。
+
+## 官方接口依据
+
+实现遵循当前 OpenAI 官方公开流程，不抓取浏览器 Cookie、不调用 ChatGPT 私有网页接口：
+
+- [Sign in with ChatGPT：开源本地工具](https://developers.openai.com/siwc/token-sharing-open-source)
+- [注册与登录](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+- [账号与会话](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
+- [模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
+- [错误与恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)
+- [Preview 限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+
 许可证：MIT。
-
-## 已知问题
-
-（注：由于仅个人使用，暂无修补计划。）
-
-* 在添加部分文件时会多次触发本插件
-* 在打开部分文件时会触发本插件，例如对部分book类型文件打开时会反复弹窗提示格式不支持

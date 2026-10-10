@@ -1,10 +1,15 @@
-zqr-menu-root = Zotero 论文 AI 速读
-zqr-menu-generate = 生成 AI 速读
-zqr-menu-regenerate = 重新生成
-zqr-menu-status = 查看状态
-zqr-menu-settings = 设置
+zqr-menu-root =
+    .label = Zotero 论文 AI 速读
+zqr-menu-generate =
+    .label = 生成 AI 速读
+zqr-menu-regenerate =
+    .label = 重新生成
+zqr-menu-status =
+    .label = 查看状态
+zqr-menu-settings =
+    .label = 设置
 zqr-menu-auto =
-    自动处理：{ $enabled ->
+    .label = 自动处理：{ $enabled ->
         [true] 开启
        *[false] 关闭
     }

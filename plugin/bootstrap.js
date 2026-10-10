@@ -44,6 +44,12 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 		};
 
 		const fallbackStrings = {
+			"zqr-menu-root": "Zotero AI Quick Read",
+			"zqr-menu-generate": "Generate AI Quick Read",
+			"zqr-menu-regenerate": "Regenerate",
+			"zqr-menu-status": "View Status",
+			"zqr-menu-settings": "Settings",
+			"zqr-menu-auto": "Automatic processing",
 			"zqr-dialog-title": "Zotero AI Quick Read",
 			"zqr-settings-url": "Local backend URL (HTTP loopback only):",
 			"zqr-settings-token": "Backend Bearer token. Leave blank to keep the current value.",
@@ -440,9 +446,23 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				const window = event?.target?.ownerGlobal || ownerWindow(context);
 				runCommand(() => handler(menuItems(context), window), window);
 			};
-			const eligibility = (_event, context) => {
-				context.setEnabled(selectionMayContainPDF(context.items));
+			const safeShowing = (labelID, handler) => (event, context) => {
+				try {
+					const menuElem = context?.menuElem;
+					if (menuElem && !menuElem.getAttribute("label")) {
+						menuElem.setAttribute("label", fallbackStrings[labelID] || labelID);
+					}
+					handler?.(event, context);
+				}
+				catch (error) {
+					// MenuManager runs hooks inside Zotero's own popup event. Never let a
+					// plugin callback abort construction of Zotero's native menus.
+					Zotero.logError(error);
+				}
 			};
+			const eligibility = safeShowing("zqr-menu-generate", (_event, context) => {
+				context?.setEnabled?.(selectionMayContainPDF(context.items));
+			});
 			runtime.menuHandle = Zotero.MenuManager.registerMenu({
 				menuID: MENU_ID,
 				pluginID: ADDON_ID,
@@ -450,6 +470,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				menus: [{
 					menuType: "submenu",
 					l10nID: "zqr-menu-root",
+					onShowing: safeShowing("zqr-menu-root"),
 					menus: [
 						{
 							menuType: "menuitem",
@@ -460,28 +481,35 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 						{
 							menuType: "menuitem",
 							l10nID: "zqr-menu-regenerate",
-							onShowing: eligibility,
+							onShowing: safeShowing("zqr-menu-regenerate", (_event, context) => {
+								context?.setEnabled?.(selectionMayContainPDF(context.items));
+							}),
 							onCommand: command((items, window) => submitSelection(items, true, window)),
 						},
 						{
 							menuType: "menuitem",
 							l10nID: "zqr-menu-status",
-							onShowing: (_event, context) => context.setEnabled(menuItems(context).length > 0),
+							onShowing: safeShowing("zqr-menu-status", (_event, context) => {
+								context?.setEnabled?.(menuItems(context).length > 0);
+							}),
 							onCommand: command((items, window) => showStatus(items, window)),
 						},
 						{ menuType: "separator" },
 						{
 							menuType: "menuitem",
 							l10nID: "zqr-menu-settings",
+							onShowing: safeShowing("zqr-menu-settings"),
 							onCommand: command((_items, window) => openSettings(window)),
 						},
 						{
 							menuType: "menuitem",
 							l10nID: "zqr-menu-auto",
 							l10nArgs: JSON.stringify({ enabled: getBoolPref("autoProcess", false) ? "true" : "false" }),
-							onShowing: (_event, context) => context.setL10nArgs(JSON.stringify({
-								enabled: getBoolPref("autoProcess", false) ? "true" : "false",
-							})),
+							onShowing: safeShowing("zqr-menu-auto", (_event, context) => {
+								context?.setL10nArgs?.(JSON.stringify({
+									enabled: getBoolPref("autoProcess", false) ? "true" : "false",
+								}));
+							}),
 							onCommand: command((_items, window) => toggleAutomatic(window)),
 						},
 					],

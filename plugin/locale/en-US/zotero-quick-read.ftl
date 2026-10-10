@@ -1,10 +1,15 @@
-zqr-menu-root = Zotero AI Quick Read
-zqr-menu-generate = Generate AI Quick Read
-zqr-menu-regenerate = Regenerate
-zqr-menu-status = View Status
-zqr-menu-settings = Settings
+zqr-menu-root =
+    .label = Zotero AI Quick Read
+zqr-menu-generate =
+    .label = Generate AI Quick Read
+zqr-menu-regenerate =
+    .label = Regenerate
+zqr-menu-status =
+    .label = View Status
+zqr-menu-settings =
+    .label = Settings
 zqr-menu-auto =
-    Automatic processing: { $enabled ->
+    .label = Automatic processing: { $enabled ->
         [true] On
        *[false] Off
     }

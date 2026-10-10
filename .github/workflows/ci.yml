@@ -27,4 +27,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zotero-quick-read-xpi
-          path: dist/zotero-quick-read-0.1.0.xpi
+          path: dist/zotero-quick-read-2.0.1.xpi
