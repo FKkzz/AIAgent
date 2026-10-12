@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -20,8 +23,10 @@ def create_app(
     runtime: Runtime | None = None,
     start_worker: bool = True,
     allow_test_client: bool = False,
+    shutdown_callback: Callable[[], None] | None = None,
 ) -> FastAPI:
     active = runtime or build_runtime(data_dir)
+    started_at = datetime.now(UTC).isoformat()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -104,7 +109,26 @@ def create_app(
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "version": __version__, "loopback": True}
+        return {
+            "status": "ok",
+            "version": __version__,
+            "loopback": True,
+            "pid": os.getpid(),
+            "started_at": started_at,
+        }
+
+    @app.post("/api/v1/control/shutdown", dependencies=protected)
+    def shutdown():
+        if shutdown_callback is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "shutdown_unavailable",
+                    "message": "This server instance cannot be stopped through the API.",
+                },
+            )
+        shutdown_callback()
+        return {"ok": True, "message": "Backend shutdown requested."}
 
     @app.get("/api/v1/info", dependencies=protected)
     def info():

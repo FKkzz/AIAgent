@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -87,6 +88,7 @@ class JobWorker:
                 self._wake.clear()
 
     def _process(self, job: JobRecord) -> None:
+        started_at = time.perf_counter()
         try:
             self._check_cancelled(job.id)
             model = job.model or self.settings.selected_model
@@ -197,12 +199,12 @@ class JobWorker:
             )
             structured = normalize_tags(structured, self.settings.output.max_tags)
             usage = _aggregate_usage(usage_events)
+            elapsed_seconds = round(time.perf_counter() - started_at, 3)
             note_html = render_note_html(
                 structured,
                 model=model,
-                fingerprint=fingerprint,
-                instruction_version=job.instruction_version,
                 usage=usage,
+                elapsed_seconds=elapsed_seconds,
             )
             result = {
                 "schema_version": "1.0",
@@ -223,6 +225,7 @@ class JobWorker:
                     "instruction_version": job.instruction_version,
                     "fingerprint": fingerprint,
                     "usage": usage,
+                    "elapsed_seconds": elapsed_seconds,
                     "response_ids": response_ids,
                     "chunks": len(chunks),
                     "pages_read": pages_read,

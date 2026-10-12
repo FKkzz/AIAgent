@@ -25,7 +25,10 @@ def create_pdf(path: Path):
 class FakeClient:
     def respond(self, *, model, instructions, input_content, auth_mode):
         if "必须符合以下 JSON Schema" not in instructions:
-            return InferenceResult('{"facts":["[PDF p.1] fact"]}', {"input_tokens": 10})
+            return InferenceResult(
+                '{"facts":["[PDF p.1] fact"]}',
+                {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            )
         result = {
             "schema_version": "1.0",
             "title": "Fake",
@@ -76,7 +79,11 @@ class FakeClient:
             },
             "limitations": [],
         }
-        return InferenceResult(json.dumps(result, ensure_ascii=False), {"output_tokens": 20}, "r1")
+        return InferenceResult(
+            json.dumps(result, ensure_ascii=False),
+            {"input_tokens": 30, "output_tokens": 20, "total_tokens": 50},
+            "r1",
+        )
 
 
 def test_worker_only_completes_after_validated_result(tmp_path: Path):
@@ -108,3 +115,15 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
     assert completed.result["tags"] == ["超快动力学"]
     assert "AI 速读" in completed.result["note_html"]
     assert completed.result["processing"]["total_pages"] == 2
+    assert completed.result["processing"]["elapsed_seconds"] >= 0
+    note_html = completed.result["note_html"]
+    usage = completed.result["processing"]["usage"]
+    assert f"请求 {usage['requests']} 次" in note_html
+    assert f"输入 {usage['totals']['input_tokens']:,}" in note_html
+    assert f"输出 {usage['totals']['output_tokens']:,}" in note_html
+    assert f"总计 {usage['totals']['total_tokens']:,}" in note_html
+    assert "处理耗时" in note_html
+    assert "生成时间" in note_html
+    assert "文件指纹" not in note_html
+    assert "physics-zh-v1" not in note_html
+    assert "per_request" not in note_html

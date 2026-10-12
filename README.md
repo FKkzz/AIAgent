@@ -2,14 +2,14 @@
 
 Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给本地后台处理，并在父文献条目下生成中文“AI 速读”子笔记和规范标签。
 
-当前维护版本：`2.0.2`。`2.0.0` 是替换旧软件的完整重构版；`2.0.2` 修复 Zotero 9.0.6 无法发现插件本地化资源、进而阻断右键菜单构建的问题。详见 [CHANGELOG.md](CHANGELOG.md)。
+当前正式版本：`2.1.0`。`2.0.0` 是替换旧软件的完整重构版；`2.1.0` 增加了直观、安全的后台启动、状态检查、关闭和重启命令，并保留 2.0.3 的精简任务尾注。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 先认识三个文件
 
 | 文件 | 用途 |
 |---|---|
-| `dist/ZoteroQuickRead.exe` | Windows 本地后台。本机交付已生成；GitHub 源码仓库不保存 EXE |
-| `dist/zotero-quick-read-2.0.2.xpi` | 安装到 Zotero 的插件 |
+| `dist/ZoteroQuickRead.exe` | Windows 本地后台；正式版可从 GitHub Release 下载 |
+| `dist/zotero-quick-read-2.1.0.xpi` | 安装到 Zotero 的插件 |
 | `README.md` | 你正在阅读的使用教程 |
 
 默认后台地址是 `http://127.0.0.1:23120`。不要使用 Zotero Connector 占用的 `23119`。
@@ -29,7 +29,22 @@ Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给�
 
 ### 第 1 步：进入项目目录
 
-如果你正在使用本机已经构建好的完整交付，打开 PowerShell，执行：
+最简单的安装方式是打开 [GitHub Releases](https://github.com/FKkzz/AIAgent/releases)，下载当前版本的以下四个文件：
+
+- `ZoteroQuickRead.exe`
+- `ZoteroQuickRead.exe.sha256`
+- `zotero-quick-read-2.1.0.xpi`
+- `zotero-quick-read-2.1.0.xpi.sha256`
+
+把 EXE 和 XPI 放进同一个新目录，例如 `D:\ZoteroQuickRead`。打开 PowerShell，进入该目录：
+
+```powershell
+cd D:\ZoteroQuickRead
+```
+
+后续命令中的 `.\dist\ZoteroQuickRead.exe` 请相应改为 `.\ZoteroQuickRead.exe`。
+
+如果你正在使用本机已经构建好的完整项目目录，打开 PowerShell，执行：
 
 ```powershell
 cd D:\CodeWorkspace\AIAgent
@@ -43,7 +58,7 @@ git clone https://github.com/FKkzz/AIAgent.git
 cd .\AIAgent
 ```
 
-GitHub 源码仓库不保存 Windows EXE。仅源码用户还要确认 `python --version` 显示 3.11 或更高版本，然后执行：
+如果选择下载源码 ZIP 或克隆仓库，源码目录本身不带 Windows EXE。仅源码用户还要确认 `python --version` 显示 3.11 或更高版本，然后执行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1
@@ -159,26 +174,39 @@ oidc_and_jwks         ok
 ### 第 7 步：启动本地后台
 
 ```powershell
+.\dist\ZoteroQuickRead.exe start
+```
+
+`start` 会在后台启动服务，然后立即返回 PowerShell 提示符。返回提示符不代表后台已经关闭。检查当前状态：
+
+```powershell
+.\dist\ZoteroQuickRead.exe status
+```
+
+正常结果包含 `running: true`，并显示后台版本、PID、模型、启动时间和地址。需要关闭或重启时执行：
+
+```powershell
+.\dist\ZoteroQuickRead.exe stop
+.\dist\ZoteroQuickRead.exe restart
+```
+
+如果希望在前台观察日志，也可以使用 `serve`。此时必须保持窗口打开，并在同一窗口按 `Ctrl+C` 关闭：
+
+```powershell
 .\dist\ZoteroQuickRead.exe serve
 ```
 
-保持这个 PowerShell 窗口打开。另开一个 PowerShell 可以检查：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:23120/health
-```
-
-正常结果包含 `status: ok`。
+如果后台已经运行，再执行 `serve` 只会明确显示“后台已经在运行”和对应 PID，不会再出现端口绑定错误。
 
 ### 第 8 步：安装或升级 Zotero 插件
 
-安装文件位于项目目录的 `dist\zotero-quick-read-2.0.2.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.0.2.xpi`。
+安装文件位于项目目录的 `dist\zotero-quick-read-2.1.0.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.1.0.xpi`。
 
 1. 打开 Zotero。
 2. 进入“工具 → 插件”。
 3. 点击右上角齿轮。
 4. 选择“从文件安装插件”。
-5. 选择 `zotero-quick-read-2.0.2.xpi`。
+5. 选择 `zotero-quick-read-2.1.0.xpi`。
 6. 如果已安装旧版，确认替换，然后完整退出并重新打开 Zotero。
 
 插件默认读取 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token`，通常不需要手工复制 Token。
@@ -199,10 +227,11 @@ Invoke-RestMethod http://127.0.0.1:23120/health
 
 ```powershell
 cd D:\CodeWorkspace\AIAgent
-.\dist\ZoteroQuickRead.exe serve
+.\dist\ZoteroQuickRead.exe start
+.\dist\ZoteroQuickRead.exe status
 ```
 
-保持窗口运行，再打开 Zotero：
+看到 `running: true` 后即可打开 Zotero。`start` 是幂等操作：后台已经运行时重复执行不会启动第二份进程。
 
 - “生成 AI 速读”：处理选中的论文。
 - “重新生成”：强制建立新任务。人工修改过的旧笔记会被保留。
@@ -230,7 +259,7 @@ cd D:\CodeWorkspace\AIAgent
 
 ### 启用插件后右键无反应，或“查看”等菜单文字缺失
 
-2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。重新安装 `dist/zotero-quick-read-2.0.2.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
+2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。请安装当前的 `dist/zotero-quick-read-2.1.0.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
 
 ### `unsupported_country_region_territory`
 
@@ -279,7 +308,19 @@ cd D:\CodeWorkspace\AIAgent
 
 ### 后台端口被占用
 
-不要使用 Zotero Connector 的 `23119`。选择其他 loopback 端口：
+先判断是否已经有本工具后台在运行：
+
+```powershell
+.\dist\ZoteroQuickRead.exe status
+```
+
+如果显示 `running: true`，不需要再次启动。可以直接使用，也可以执行：
+
+```powershell
+.\dist\ZoteroQuickRead.exe restart
+```
+
+如果显示端口被其他程序占用，不要使用 Zotero Connector 的 `23119`。选择其他 loopback 端口：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe configure --port <新端口>

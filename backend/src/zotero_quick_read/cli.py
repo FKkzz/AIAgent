@@ -14,10 +14,12 @@ from .auth import ChatGPTAuth
 from .config import AppSettings, SettingsStore, default_data_dir
 from .diagnostics import run_diagnostics
 from .errors import QuickReadError
+from .local_auth import ensure_local_api_token
 from .openai_client import API_KEY_SECRET, OpenAIClient
 from .runtime import build_runtime
 from .schemas import JobSubmit
 from .secrets import SecretStore
+from .service_control import ServiceController
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,6 +67,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = commands.add_parser("serve", help="Run the loopback service")
     serve.add_argument("--log-level", default="info", choices=("error", "warning", "info", "debug"))
+
+    commands.add_parser("status", help="Show whether the local backend is running")
+    start = commands.add_parser("start", help="Start the local backend in the background")
+    start.add_argument(
+        "--log-level", default="warning", choices=("error", "warning", "info", "debug")
+    )
+    start.add_argument("--timeout", type=float, default=20.0)
+    stop = commands.add_parser("stop", help="Stop the authenticated local backend")
+    stop.add_argument("--timeout", type=float, default=20.0)
+    restart = commands.add_parser("restart", help="Restart the authenticated local backend")
+    restart.add_argument(
+        "--log-level", default="warning", choices=("error", "warning", "info", "debug")
+    )
+    restart.add_argument("--timeout", type=float, default=20.0)
 
     read = commands.add_parser("read", help="Process one local PDF and create a preview")
     read.add_argument("pdf", type=Path)
@@ -148,6 +164,58 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
         _print_json({"ok": True, "settings": _safe_settings(settings, secrets)})
         return 0
 
+    if args.command in {"status", "start", "stop", "restart", "serve"}:
+        local_token = ensure_local_api_token(data_dir, secrets)
+        service = ServiceController(settings, data_dir, local_token)
+        if args.command == "status":
+            _print_json({"ok": True, "service": service.status()})
+            return 0
+        if args.command == "start":
+            _print_json(
+                {
+                    "ok": True,
+                    "service": service.start(
+                        log_level=args.log_level,
+                        timeout=args.timeout,
+                    ),
+                }
+            )
+            return 0
+        if args.command == "stop":
+            _print_json({"ok": True, "service": service.stop(timeout=args.timeout)})
+            return 0
+        if args.command == "restart":
+            _print_json(
+                {
+                    "ok": True,
+                    "service": service.restart(
+                        log_level=args.log_level,
+                        timeout=args.timeout,
+                    ),
+                }
+            )
+            return 0
+        current = service.status()
+        if current["running"]:
+            _print_json(
+                {
+                    "ok": True,
+                    "service": {
+                        **current,
+                        "already_running": True,
+                        "message": "后台已经在运行；无需再次执行 serve。",
+                        "how_to_stop": "ZoteroQuickRead.exe stop",
+                        "how_to_restart": "ZoteroQuickRead.exe restart",
+                    },
+                }
+            )
+            return 0
+        if current["port_in_use"]:
+            raise QuickReadError(
+                "backend_port_in_use",
+                f"端口 {settings.port} 已被其他程序占用；后台未启动。",
+            )
+
     auth = ChatGPTAuth(settings, secrets)
     client = OpenAIClient(settings, secrets, auth=auth)
     if args.command == "auth-login":
@@ -214,8 +282,13 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
     if args.command == "serve":
         # Build before starting so ACL/config errors are reported synchronously.
         runtime = build_runtime(data_dir)
-        app = create_app(runtime=runtime)
-        uvicorn.run(
+        server_holder: dict[str, uvicorn.Server] = {}
+
+        def request_shutdown() -> None:
+            server_holder["server"].should_exit = True
+
+        app = create_app(runtime=runtime, shutdown_callback=request_shutdown)
+        config = uvicorn.Config(
             app,
             host="127.0.0.1",
             port=runtime.settings.port,
@@ -223,6 +296,9 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
             access_log=False,
             proxy_headers=False,
         )
+        server = uvicorn.Server(config)
+        server_holder["server"] = server
+        server.run()
         return 0
     if args.command == "read":
         return _read_preview(args, data_dir)

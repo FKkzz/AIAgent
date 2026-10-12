@@ -16,7 +16,10 @@ def test_health_is_local_but_does_not_require_token(tmp_path: Path):
     _runtime, client = client_for(tmp_path)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["loopback"] is True
+    health = response.json()
+    assert health["loopback"] is True
+    assert isinstance(health["pid"], int)
+    assert health["started_at"].endswith("+00:00")
 
 
 def test_protected_endpoint_rejects_missing_or_bad_token(tmp_path: Path):
@@ -70,3 +73,23 @@ def test_token_file_is_not_written_to_settings(tmp_path: Path):
     token_file = tmp_path / "plugin-token"
     assert token_file.read_text(encoding="ascii").strip() == runtime.local_token
     assert runtime.local_token not in (tmp_path / "settings.json").read_text(encoding="utf-8")
+
+
+def test_authenticated_shutdown_requests_server_exit(tmp_path: Path):
+    runtime = build_runtime(tmp_path)
+    calls: list[bool] = []
+    app = create_app(
+        runtime=runtime,
+        start_worker=False,
+        allow_test_client=True,
+        shutdown_callback=lambda: calls.append(True),
+    )
+    client = TestClient(app)
+    assert client.post("/api/v1/control/shutdown").status_code == 401
+    response = client.post(
+        "/api/v1/control/shutdown",
+        headers={"Authorization": f"Bearer {runtime.local_token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert calls == [True]

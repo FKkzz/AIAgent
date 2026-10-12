@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Create build environment
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -e ".\backend[dev,build]"
+      - name: Test and build release artifacts
+        shell: powershell
+        run: .\scripts\build-all.ps1
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/ZoteroQuickRead.exe
+            dist/ZoteroQuickRead.exe.sha256
+            dist/zotero-quick-read-2.1.0.xpi
+            dist/zotero-quick-read-2.1.0.xpi.sha256

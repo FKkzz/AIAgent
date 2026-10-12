@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -143,9 +143,8 @@ def render_note_html(
     result: QuickReadResult,
     *,
     model: str,
-    fingerprint: str,
-    instruction_version: str,
     usage: dict | None = None,
+    elapsed_seconds: float | None = None,
 ) -> str:
     """Render validated model data; model-provided HTML is never trusted."""
 
@@ -174,8 +173,9 @@ def render_note_html(
     warnings.extend(result.limitations)
     warning_html = "".join(f"<li>{esc(item)}</li>" for item in dict.fromkeys(warnings))
     tags = "、".join(esc(tag.canonical) for tag in result.tags)
-    generated = datetime.now(UTC).isoformat()
-    usage_text = esc(str(usage or {}))
+    generated = datetime.now().astimezone().isoformat(timespec="seconds")
+    usage_summary = _format_usage_summary(usage)
+    duration = _format_duration(elapsed_seconds)
     return (
         '<div data-zqr-note="1" data-zqr-schema="1.0">'
         "<h1>AI 速读</h1>"
@@ -192,10 +192,45 @@ def render_note_html(
         f"<ul>{warning_html}</ul>"
         "<hr>"
         f"<p><small>由 Zotero Quick Read 生成；模型 {esc(model)}；"
-        f"指令 {esc(instruction_version)}；文件指纹 {esc(fingerprint[:16])}…；"
-        f"时间 {esc(generated)}；usage {usage_text}</small></p>"
+        f"{esc(usage_summary)}；处理耗时 {esc(duration)}；"
+        f"生成时间 {esc(generated)}</small></p>"
         "</div>"
     )
+
+
+def _format_usage_summary(usage: dict | None) -> str:
+    usage = usage if isinstance(usage, dict) else {}
+    totals = usage.get("totals")
+    totals = totals if isinstance(totals, dict) else {}
+
+    def number(key: str) -> int | None:
+        value = totals.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    requests = usage.get("requests")
+    request_text = f"请求 {requests:,} 次" if isinstance(requests, int) else "请求次数未记录"
+    input_tokens = number("input_tokens")
+    output_tokens = number("output_tokens")
+    total_tokens = number("total_tokens")
+    if None in {input_tokens, output_tokens, total_tokens}:
+        return f"{request_text}；Token 未完整记录"
+    return (
+        f"{request_text}；Token：输入 {input_tokens:,} / "
+        f"输出 {output_tokens:,} / 总计 {total_tokens:,}"
+    )
+
+
+def _format_duration(elapsed_seconds: float | None) -> str:
+    if not isinstance(elapsed_seconds, (int, float)) or elapsed_seconds < 0:
+        return "未记录"
+    seconds = int(round(elapsed_seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours} 小时 {minutes} 分 {seconds} 秒"
+    if minutes:
+        return f"{minutes} 分 {seconds} 秒"
+    return f"{seconds} 秒"
 
 
 def _compress_pages(pages: list[int]) -> str:
