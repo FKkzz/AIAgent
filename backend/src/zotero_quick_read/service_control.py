@@ -104,7 +104,13 @@ class ServiceController:
             )
         return base
 
-    def start(self, *, log_level: str = "warning", timeout: float = 20.0) -> dict[str, Any]:
+    def start(
+        self,
+        *,
+        log_level: str = "warning",
+        timeout: float = 20.0,
+        show_window: bool = True,
+    ) -> dict[str, Any]:
         current = self.status()
         if current["running"]:
             return {
@@ -119,12 +125,11 @@ class ServiceController:
             )
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        visible_window = os.name == "nt" and show_window
         log_path = self.data_dir / "backend.log"
-        command = self._serve_command(log_level)
+        command = self._serve_command(log_level, managed_window=visible_window)
         popen_options: dict[str, Any] = {
             "stdin": subprocess.DEVNULL,
-            "stdout": None,
-            "stderr": subprocess.STDOUT,
             "close_fds": True,
         }
         if getattr(sys, "frozen", False):
@@ -132,28 +137,44 @@ class ServiceController:
             child_environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
             popen_options["env"] = child_environment
         if os.name == "nt":
-            popen_options["creationflags"] = (
-                subprocess.CREATE_NO_WINDOW
-                | subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-            )
+            if visible_window:
+                popen_options["creationflags"] = (
+                    subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else:
+                popen_options["creationflags"] = (
+                    subprocess.CREATE_NO_WINDOW
+                    | subprocess.DETACHED_PROCESS
+                    | subprocess.CREATE_NEW_PROCESS_GROUP
+                )
         else:
             popen_options["start_new_session"] = True
 
-        with log_path.open("a", encoding="utf-8") as log_file:
-            popen_options["stdout"] = log_file
+        if visible_window:
             process = subprocess.Popen(command, **popen_options)  # noqa: S603
+        else:
+            with log_path.open("a", encoding="utf-8") as log_file:
+                popen_options["stdout"] = log_file
+                popen_options["stderr"] = subprocess.STDOUT
+                process = subprocess.Popen(command, **popen_options)  # noqa: S603
 
         deadline = time.monotonic() + max(1.0, timeout)
         while time.monotonic() < deadline:
             current = self.status()
             if current["running"]:
-                return {
+                result = {
                     **current,
                     "started": True,
-                    "log_file": str(log_path),
-                    "message": "后台已启动。以后可用 status 查看、stop 关闭。",
+                    "window_visible": visible_window,
+                    "message": (
+                        "后台已启动；状态窗口可最小化，使用 stop 关闭。"
+                        if visible_window
+                        else "后台已隐藏启动。以后可用 status 查看、stop 关闭。"
+                    ),
                 }
+                if not visible_window:
+                    result["log_file"] = str(log_path)
+                return result
             if process.poll() is not None:
                 break
             time.sleep(0.2)
@@ -222,9 +243,19 @@ class ServiceController:
             retryable=True,
         )
 
-    def restart(self, *, log_level: str = "warning", timeout: float = 20.0) -> dict[str, Any]:
+    def restart(
+        self,
+        *,
+        log_level: str = "warning",
+        timeout: float = 20.0,
+        show_window: bool = True,
+    ) -> dict[str, Any]:
         self.stop(timeout=timeout)
-        result = self.start(log_level=log_level, timeout=timeout)
+        result = self.start(
+            log_level=log_level,
+            timeout=timeout,
+            show_window=show_window,
+        )
         result["restarted"] = True
         result["message"] = "后台已重新启动。"
         return result
@@ -239,7 +270,7 @@ class ServiceController:
         except OSError:
             return False
 
-    def _serve_command(self, log_level: str) -> list[str]:
+    def _serve_command(self, log_level: str, *, managed_window: bool = False) -> list[str]:
         common = [
             "--data-dir",
             str(self.data_dir),
@@ -247,6 +278,8 @@ class ServiceController:
             "--log-level",
             log_level,
         ]
+        if managed_window:
+            common.append("--managed-window")
         if getattr(sys, "frozen", False):
             return [sys.executable, *common]
         return [sys.executable, "-m", "zotero_quick_read", *common]

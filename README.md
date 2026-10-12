@@ -2,14 +2,14 @@
 
 Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给本地后台处理，并在父文献条目下生成中文“AI 速读”子笔记和规范标签。
 
-当前正式版本：`2.1.0`。`2.0.0` 是替换旧软件的完整重构版；`2.1.0` 增加了直观、安全的后台启动、状态检查、关闭和重启命令，并保留 2.0.3 的精简任务尾注。详见 [CHANGELOG.md](CHANGELOG.md)。
+当前正式版本：`2.1.1`。`2.0.0` 是替换旧软件的完整重构版；`2.1.1` 提供带明确运行提示的后台状态窗口，并保留 2.1.0 的启动、状态检查、关闭和重启命令。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 先认识三个文件
 
 | 文件 | 用途 |
 |---|---|
 | `dist/ZoteroQuickRead.exe` | Windows 本地后台；正式版可从 GitHub Release 下载 |
-| `dist/zotero-quick-read-2.1.0.xpi` | 安装到 Zotero 的插件 |
+| `dist/zotero-quick-read-2.1.1.xpi` | 安装到 Zotero 的插件 |
 | `README.md` | 你正在阅读的使用教程 |
 
 默认后台地址是 `http://127.0.0.1:23120`。不要使用 Zotero Connector 占用的 `23119`。
@@ -33,8 +33,8 @@ Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给�
 
 - `ZoteroQuickRead.exe`
 - `ZoteroQuickRead.exe.sha256`
-- `zotero-quick-read-2.1.0.xpi`
-- `zotero-quick-read-2.1.0.xpi.sha256`
+- `zotero-quick-read-2.1.1.xpi`
+- `zotero-quick-read-2.1.1.xpi.sha256`
 
 把 EXE 和 XPI 放进同一个新目录，例如 `D:\ZoteroQuickRead`。打开 PowerShell，进入该目录：
 
@@ -177,7 +177,7 @@ oidc_and_jwks         ok
 .\dist\ZoteroQuickRead.exe start
 ```
 
-`start` 会在后台启动服务，然后立即返回 PowerShell 提示符。返回提示符不代表后台已经关闭。检查当前状态：
+`start` 会打开一个标题为 `Zotero Quick Read 2.1.1 - RUNNING` 的状态窗口，然后立即返回原 PowerShell 提示符。状态窗口会显示后台地址和关闭命令，可以安全地最小化；关闭该窗口会停止后台。返回原 PowerShell 提示符不代表后台已经关闭。检查当前状态：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe status
@@ -198,15 +198,21 @@ oidc_and_jwks         ok
 
 如果后台已经运行，再执行 `serve` 只会明确显示“后台已经在运行”和对应 PID，不会再出现端口绑定错误。
 
+如果确实不希望显示状态窗口，可以隐藏启动：
+
+```powershell
+.\dist\ZoteroQuickRead.exe start --hidden
+```
+
 ### 第 8 步：安装或升级 Zotero 插件
 
-安装文件位于项目目录的 `dist\zotero-quick-read-2.1.0.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.1.0.xpi`。
+安装文件位于项目目录的 `dist\zotero-quick-read-2.1.1.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.1.1.xpi`。
 
 1. 打开 Zotero。
 2. 进入“工具 → 插件”。
 3. 点击右上角齿轮。
 4. 选择“从文件安装插件”。
-5. 选择 `zotero-quick-read-2.1.0.xpi`。
+5. 选择 `zotero-quick-read-2.1.1.xpi`。
 6. 如果已安装旧版，确认替换，然后完整退出并重新打开 Zotero。
 
 插件默认读取 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token`，通常不需要手工复制 Token。
@@ -259,7 +265,7 @@ cd D:\CodeWorkspace\AIAgent
 
 ### 启用插件后右键无反应，或“查看”等菜单文字缺失
 
-2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。请安装当前的 `dist/zotero-quick-read-2.1.0.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
+2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。请安装当前的 `dist/zotero-quick-read-2.1.1.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
 
 ### `unsupported_country_region_territory`
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from zotero_quick_read.cli import build_parser
+from zotero_quick_read.cli import _show_managed_window_banner, build_parser
 from zotero_quick_read.config import AppSettings
 from zotero_quick_read.service_control import ServiceController
 
@@ -29,7 +29,7 @@ class FakeSession:
                 {
                     "status": "ok",
                     "loopback": True,
-                    "version": "2.1.0",
+                    "version": "2.1.1",
                     "pid": 1234,
                     "started_at": "2026-10-12T00:00:00+00:00",
                 },
@@ -61,7 +61,7 @@ def test_status_reports_running_model_and_pid(tmp_path: Path, monkeypatch):
     status = service.status()
     assert status["running"] is True
     assert status["authenticated"] is True
-    assert status["version"] == "2.1.0"
+    assert status["version"] == "2.1.1"
     assert status["pid"] == 1234
     assert status["selected_model"] == "gpt-5.6-terra"
     assert fake_session.calls[-1][2] == {"Authorization": "Bearer secret"}
@@ -94,3 +94,19 @@ def test_cli_exposes_explicit_service_commands():
     parser = build_parser()
     for command in ("status", "start", "stop", "restart"):
         assert parser.parse_args([command]).command == command
+    assert parser.parse_args(["start"]).hidden is False
+    assert parser.parse_args(["start", "--hidden"]).hidden is True
+    assert parser.parse_args(["restart", "--hidden"]).hidden is True
+
+
+def test_managed_serve_command_and_banner_are_explicit(tmp_path: Path, capsys):
+    service = controller(tmp_path)
+    command = service._serve_command("warning", managed_window=True)
+    assert command[-1] == "--managed-window"
+
+    _show_managed_window_banner(service.settings)
+    output = capsys.readouterr().out
+    assert "Zotero Quick Read" in output
+    assert "RUNNING" in output
+    assert "http://127.0.0.1:23120" in output
+    assert "ZoteroQuickRead.exe stop" in output

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import getpass
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 import uvicorn
 
+from . import __version__
 from .api import create_app
 from .auth import ChatGPTAuth
 from .config import AppSettings, SettingsStore, default_data_dir
@@ -67,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = commands.add_parser("serve", help="Run the loopback service")
     serve.add_argument("--log-level", default="info", choices=("error", "warning", "info", "debug"))
+    serve.add_argument("--managed-window", action="store_true", help=argparse.SUPPRESS)
 
     commands.add_parser("status", help="Show whether the local backend is running")
     start = commands.add_parser("start", help="Start the local backend in the background")
@@ -74,6 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level", default="warning", choices=("error", "warning", "info", "debug")
     )
     start.add_argument("--timeout", type=float, default=20.0)
+    start.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Start without a visible status window",
+    )
     stop = commands.add_parser("stop", help="Stop the authenticated local backend")
     stop.add_argument("--timeout", type=float, default=20.0)
     restart = commands.add_parser("restart", help="Restart the authenticated local backend")
@@ -81,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level", default="warning", choices=("error", "warning", "info", "debug")
     )
     restart.add_argument("--timeout", type=float, default=20.0)
+    restart.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Restart without a visible status window",
+    )
 
     read = commands.add_parser("read", help="Process one local PDF and create a preview")
     read.add_argument("pdf", type=Path)
@@ -177,6 +191,7 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
                     "service": service.start(
                         log_level=args.log_level,
                         timeout=args.timeout,
+                        show_window=not args.hidden,
                     ),
                 }
             )
@@ -191,6 +206,7 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
                     "service": service.restart(
                         log_level=args.log_level,
                         timeout=args.timeout,
+                        show_window=not args.hidden,
                     ),
                 }
             )
@@ -282,6 +298,8 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
     if args.command == "serve":
         # Build before starting so ACL/config errors are reported synchronously.
         runtime = build_runtime(data_dir)
+        if args.managed_window:
+            _show_managed_window_banner(runtime.settings)
         server_holder: dict[str, uvicorn.Server] = {}
 
         def request_shutdown() -> None:
@@ -307,6 +325,44 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
         print(runtime.data_dir / "plugin-token")
         return 0
     raise AssertionError(args.command)
+
+
+def _show_managed_window_banner(settings: AppSettings) -> None:
+    title = f"Zotero Quick Read {__version__} - RUNNING"
+    if os.name == "nt":
+        if getattr(sys, "frozen", False):
+            try:
+                console_output = open(  # Kept open for the managed process lifetime.
+                    "CONOUT$",
+                    "w",
+                    encoding="utf-8",
+                    errors="replace",
+                    buffering=1,
+                )
+            except OSError:
+                pass
+            else:
+                sys.stdout = console_output
+                sys.stderr = console_output
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        ctypes.windll.kernel32.SetConsoleTitleW(title)
+    border = "=" * 62
+    print(
+        "\n".join(
+            (
+                border,
+                title,
+                "",
+                "The local backend is running.",
+                f"Address: http://127.0.0.1:{settings.port}",
+                "You may minimize this window.",
+                "Stop command: ZoteroQuickRead.exe stop",
+                "Closing this window also stops the backend.",
+                border,
+            )
+        ),
+        flush=True,
+    )
 
 
 def _read_preview(args: argparse.Namespace, data_dir: Path) -> int:
