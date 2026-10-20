@@ -33,6 +33,10 @@ def test_protected_endpoint_rejects_missing_or_bad_token(tmp_path: Path):
         "/api/v1/info", headers={"Authorization": f"Bearer {runtime.local_token}"}
     )
     assert ok.status_code == 200
+    info = ok.json()
+    assert info["prompt_profile"]["id"] == "physics-zh-v1"
+    assert info["prompt_profile"]["source"] == "builtin"
+    assert info["prompt_version"].startswith("physics-zh-v1@1.0.0+")
 
 
 def test_browser_origin_is_rejected_even_with_token(tmp_path: Path):

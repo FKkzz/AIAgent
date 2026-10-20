@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 APP_NAME = "ZoteroQuickRead"
 SETTINGS_VERSION = 1
@@ -56,7 +56,29 @@ class OutputSettings(BaseModel):
     target_min_chinese_chars: int = Field(default=600, ge=200, le=5000)
     target_max_chinese_chars: int = Field(default=1000, ge=300, le=8000)
     max_tags: int = Field(default=8, ge=1, le=12)
-    prompt_version: str = "physics-zh-v1"
+    prompt_profile: str = "physics-zh-v1"
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_prompt_version(cls, value):
+        if isinstance(value, dict) and "prompt_profile" not in value:
+            legacy = value.get("prompt_version")
+            if legacy:
+                value = {**value, "prompt_profile": legacy}
+        return value
+
+    @field_validator("prompt_profile")
+    @classmethod
+    def valid_prompt_profile(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("prompt_profile cannot be empty")
+        return value
+
+    @property
+    def prompt_version(self) -> str:
+        """Compatibility alias for callers created before prompt profiles."""
+        return self.prompt_profile
 
     @field_validator("target_max_chinese_chars")
     @classmethod

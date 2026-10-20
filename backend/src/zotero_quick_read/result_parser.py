@@ -64,6 +64,7 @@ def apply_ground_truth_coverage(
         *result.methods_and_conditions,
         *result.main_conclusions,
         *result.novelty_and_significance,
+        *result.research_focus_findings,
     ]
     for point in all_points:
         for location in point.locations:

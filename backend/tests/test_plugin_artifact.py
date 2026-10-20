@@ -10,14 +10,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "plugin"
-XPI = ROOT / "dist" / "zotero-quick-read-2.1.1.xpi"
+XPI = ROOT / "dist" / "zotero-quick-read-2.2.0.xpi"
 
 
 def test_manifest_targets_installed_zotero_9():
     manifest = json.loads((PLUGIN / "manifest.json").read_text(encoding="utf-8"))
     zotero = manifest["applications"]["zotero"]
     assert manifest["manifest_version"] == 2
-    assert manifest["version"] == "2.1.1"
+    assert manifest["version"] == "2.2.0"
     assert zotero["strict_min_version"] == "9.0.6"
     assert zotero["strict_max_version"] == "9.0.*"
     assert zotero["update_url"].startswith("https://")

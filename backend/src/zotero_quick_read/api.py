@@ -137,7 +137,8 @@ def create_app(
             "version": __version__,
             "auth_mode": settings.auth_mode,
             "selected_model": settings.selected_model,
-            "prompt_version": settings.output.prompt_version,
+            "prompt_profile": active.prompt_profile.as_dict(),
+            "prompt_version": active.prompt_profile.reference,
             "proxy": {
                 "enabled": settings.proxy.enabled,
                 "version": settings.proxy.version,
@@ -166,7 +167,7 @@ def create_app(
         auth_mode = payload.auth_mode or active.settings.auth_mode
         job, created = active.db.enqueue(
             payload,
-            instruction_version=active.settings.output.prompt_version,
+            instruction_version=active.prompt_profile.reference,
             model=model,
             auth_mode=auth_mode,
             max_attempts=active.settings.max_attempts,

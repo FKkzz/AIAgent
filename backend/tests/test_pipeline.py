@@ -6,6 +6,7 @@ import pymupdf as fitz
 from zotero_quick_read.config import AppSettings, PdfSettings
 from zotero_quick_read.db import QueueDB
 from zotero_quick_read.pipeline import InferenceResult, JobWorker
+from zotero_quick_read.prompting import PromptStore
 from zotero_quick_read.schemas import JobSubmit
 
 
@@ -61,6 +62,13 @@ class FakeClient:
                     "locations": ["PDF p.2"],
                 }
             ],
+            "research_focus_findings": [
+                {
+                    "statement": "关键结论同时依赖测量结果与模型解释。",
+                    "evidence_kind": "model",
+                    "locations": ["PDF p.2"],
+                }
+            ],
             "tags": [
                 {
                     "canonical": "超快动力学",
@@ -94,6 +102,7 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
         selected_model="available-model",
         pdf=PdfSettings(stable_seconds=0, min_text_chars=50, chunk_chars=5000),
     )
+    prompt_profile = PromptStore.builtin(settings.output.prompt_profile)
     job, _ = db.enqueue(
         JobSubmit(
             library_id=1,
@@ -102,19 +111,25 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
             attachment_path=str(pdf),
             title="Fake",
         ),
-        instruction_version=settings.output.prompt_version,
+        instruction_version=prompt_profile.reference,
         model=settings.selected_model,
         auth_mode="chatgpt",
         max_attempts=3,
         fingerprint=None,
     )
-    worker = JobWorker(db, settings, lambda: FakeClient())
+    worker = JobWorker(
+        db,
+        settings,
+        lambda: FakeClient(),
+        prompt_profile=prompt_profile,
+    )
     assert worker.process_one() is True
     completed = db.get(job.id)
     assert completed.status == "completed"
     assert completed.result["tags"] == ["超快动力学"]
     assert "AI 速读" in completed.result["note_html"]
     assert completed.result["processing"]["total_pages"] == 2
+    assert completed.result["processing"]["prompt_profile"]["id"] == "physics-zh-v1"
     assert completed.result["processing"]["elapsed_seconds"] >= 0
     note_html = completed.result["note_html"]
     usage = completed.result["processing"]["usage"]
@@ -127,3 +142,4 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
     assert "文件指纹" not in note_html
     assert "physics-zh-v1" not in note_html
     assert "per_request" not in note_html
+    assert "综合阅读重点" in note_html

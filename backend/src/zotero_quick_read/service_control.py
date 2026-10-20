@@ -100,6 +100,7 @@ class ServiceController:
                     "authenticated": True,
                     "selected_model": info.get("selected_model"),
                     "auth_mode": info.get("auth_mode"),
+                    "prompt_profile": info.get("prompt_profile"),
                 }
             )
         return base

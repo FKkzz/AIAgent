@@ -5,6 +5,7 @@ import ctypes
 import getpass
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ from .diagnostics import run_diagnostics
 from .errors import QuickReadError
 from .local_auth import ensure_local_api_token
 from .openai_client import API_KEY_SECRET, OpenAIClient
+from .prompting import PromptStore, final_instructions
 from .runtime import build_runtime
 from .schemas import JobSubmit
 from .secrets import SecretStore
@@ -47,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--port", type=int)
     configure.add_argument("--page-images", choices=("on", "off"))
     configure.add_argument("--max-image-pages", type=int)
+    configure.add_argument("--prompt-profile")
 
     login = commands.add_parser("auth-login", help="Sign in with ChatGPT in configured Firefox")
     login.add_argument("--force-new-registration", action="store_true")
@@ -67,6 +70,24 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose = commands.add_parser("diagnose", help="Run layered connection diagnostics")
     diagnose.add_argument("--models", action="store_true")
     diagnose.add_argument("--inference", action="store_true")
+
+    prompt = commands.add_parser("prompt", help="Manage research-stage prompt profiles")
+    prompt_commands = prompt.add_subparsers(dest="prompt_command", required=True)
+    prompt_commands.add_parser("list", help="List built-in and custom prompt profiles")
+    prompt_show = prompt_commands.add_parser("show", help="Show a prompt profile")
+    prompt_show.add_argument("profile", nargs="?")
+    prompt_show.add_argument(
+        "--compiled",
+        action="store_true",
+        help="Include the complete instructions with schema and tag vocabulary",
+    )
+    prompt_create = prompt_commands.add_parser("create", help="Copy a profile for editing")
+    prompt_create.add_argument("profile")
+    prompt_create.add_argument("--from", dest="from_profile")
+    prompt_use = prompt_commands.add_parser("use", help="Select a prompt profile")
+    prompt_use.add_argument("profile")
+    prompt_edit = prompt_commands.add_parser("edit", help="Open a custom profile in Notepad")
+    prompt_edit.add_argument("profile", nargs="?")
 
     serve = commands.add_parser("serve", help="Run the loopback service")
     serve.add_argument("--log-level", default="info", choices=("error", "warning", "info", "debug"))
@@ -161,6 +182,9 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
             pdf_patch["max_image_pages"] = args.max_image_pages
         if pdf_patch:
             patch["pdf"] = pdf_patch
+        if args.prompt_profile:
+            profile = PromptStore(data_dir).resolve(args.prompt_profile)
+            patch["output"] = {"prompt_profile": profile.id}
         for option, key in (
             (args.firefox_path, "firefox_path"),
             (args.auth_mode, "auth_mode"),
@@ -177,6 +201,9 @@ def _dispatch(args: argparse.Namespace, data_dir: Path) -> int:
             secrets.delete(settings.proxy.password_secret)
         _print_json({"ok": True, "settings": _safe_settings(settings, secrets)})
         return 0
+
+    if args.command == "prompt":
+        return _dispatch_prompt(args, data_dir, settings_store, settings)
 
     if args.command in {"status", "start", "stop", "restart", "serve"}:
         local_token = ensure_local_api_token(data_dir, secrets)
@@ -365,6 +392,95 @@ def _show_managed_window_banner(settings: AppSettings) -> None:
     )
 
 
+def _dispatch_prompt(
+    args: argparse.Namespace,
+    data_dir: Path,
+    settings_store: SettingsStore,
+    settings: AppSettings,
+) -> int:
+    store = PromptStore(data_dir)
+    selected = settings.output.prompt_profile
+    if args.prompt_command == "list":
+        _print_json(
+            {
+                "ok": True,
+                "selected": selected,
+                "custom_directory": str(store.custom_dir),
+                "profiles": [
+                    {**profile.as_dict(), "selected": profile.id == selected}
+                    for profile in store.list()
+                ],
+            }
+        )
+        return 0
+    if args.prompt_command == "show":
+        profile = store.resolve(args.profile or selected)
+        result = {
+            "ok": True,
+            "selected": profile.id == selected,
+            "profile": profile.as_dict(include_content=True),
+        }
+        if args.compiled:
+            result["compiled_instructions"] = final_instructions(
+                settings.output.target_min_chinese_chars,
+                settings.output.target_max_chinese_chars,
+                profile,
+            )
+        _print_json(result)
+        return 0
+    if args.prompt_command == "create":
+        profile = store.create(
+            args.profile,
+            from_profile=args.from_profile or selected,
+        )
+        _print_json(
+            {
+                "ok": True,
+                "profile": profile.as_dict(include_content=False),
+                "next": [
+                    f"ZoteroQuickRead.exe prompt edit {profile.id}",
+                    f"ZoteroQuickRead.exe prompt use {profile.id}",
+                    "ZoteroQuickRead.exe restart",
+                ],
+            }
+        )
+        return 0
+    if args.prompt_command == "use":
+        profile = store.resolve(args.profile)
+        settings_store.update({"output": {"prompt_profile": profile.id}})
+        _print_json(
+            {
+                "ok": True,
+                "selected": profile.as_dict(),
+                "restart_required": True,
+                "restart_command": "ZoteroQuickRead.exe restart",
+            }
+        )
+        return 0
+    if args.prompt_command == "edit":
+        profile = store.resolve(args.profile or selected)
+        if not profile.editable:
+            raise QuickReadError(
+                "builtin_prompt_not_editable",
+                "内置方案只读。请先运行 "
+                f"prompt create my-profile --from {profile.id}，再编辑新方案。",
+            )
+        if os.name != "nt":
+            raise QuickReadError(
+                "prompt_editor_unavailable",
+                f"请使用文本编辑器打开：{profile.path}",
+            )
+        notepad = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "notepad.exe"
+        subprocess.Popen(  # noqa: S603
+            [str(notepad), profile.path],
+            close_fds=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+        _print_json({"ok": True, "opened": profile.path, "profile": profile.id})
+        return 0
+    raise AssertionError(args.prompt_command)
+
+
 def _read_preview(args: argparse.Namespace, data_dir: Path) -> int:
     runtime = build_runtime(data_dir)
     pdf = args.pdf.expanduser().resolve()
@@ -379,7 +495,7 @@ def _read_preview(args: argparse.Namespace, data_dir: Path) -> int:
             auth_mode=args.auth_mode,
             force=True,
         ),
-        instruction_version=runtime.settings.output.prompt_version,
+        instruction_version=runtime.prompt_profile.reference,
         model=args.model or runtime.settings.selected_model,
         auth_mode=args.auth_mode or runtime.settings.auth_mode,
         max_attempts=runtime.settings.max_attempts,

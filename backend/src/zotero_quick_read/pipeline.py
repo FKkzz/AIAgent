@@ -17,7 +17,7 @@ from .pdf import (
     extract_pdf,
     render_relevant_pages,
 )
-from .prompting import chunk_instructions, final_instructions
+from .prompting import PromptProfile, PromptStore, chunk_instructions, final_instructions
 from .result_parser import apply_ground_truth_coverage, normalize_tags, parse_result
 from .schemas import JobRecord, render_note_html
 
@@ -48,11 +48,15 @@ class JobWorker:
         client_factory: Callable[[], InferenceClient],
         *,
         poll_seconds: float = 1.0,
+        prompt_profile: PromptProfile | None = None,
     ):
         self.db = db
         self.settings = settings
         self.client_factory = client_factory
         self.poll_seconds = poll_seconds
+        self.prompt_profile = prompt_profile or PromptStore.builtin(
+            settings.output.prompt_profile
+        )
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
@@ -138,7 +142,7 @@ class JobWorker:
                     reply = _coerce_result(
                         client.respond(
                             model=model,
-                            instructions=chunk_instructions(),
+                            instructions=chunk_instructions(self.prompt_profile),
                             input_content=(
                                 f"论文标题：{job.title}\n"
                                 f"这是全文分段 {index}/{len(chunks)}。"
@@ -181,6 +185,7 @@ class JobWorker:
                     instructions=final_instructions(
                         self.settings.output.target_min_chinese_chars,
                         self.settings.output.target_max_chinese_chars,
+                        self.prompt_profile,
                     ),
                     input_content=final_input,
                     auth_mode=job.auth_mode,
@@ -205,6 +210,7 @@ class JobWorker:
                 model=model,
                 usage=usage,
                 elapsed_seconds=elapsed_seconds,
+                focus_heading=self.prompt_profile.note_heading,
             )
             result = {
                 "schema_version": "1.0",
@@ -223,6 +229,7 @@ class JobWorker:
                     "model": model,
                     "auth_mode": job.auth_mode,
                     "instruction_version": job.instruction_version,
+                    "prompt_profile": self.prompt_profile.as_dict(),
                     "fingerprint": fingerprint,
                     "usage": usage,
                     "elapsed_seconds": elapsed_seconds,
@@ -322,7 +329,7 @@ class JobWorker:
                 reply = _coerce_result(
                     client.respond(
                         model=model,
-                        instructions=chunk_instructions(),
+                        instructions=chunk_instructions(self.prompt_profile),
                         input_content=(
                             f"合并第 {generation} 轮、第 {index}/{len(groups)} 组事实。"
                             "保留所有关键条件、相互冲突信息和 PDF 页码；不要生成最终总结。\n\n"

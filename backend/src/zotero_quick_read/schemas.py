@@ -77,6 +77,11 @@ class QuickReadResult(BaseModel):
     main_conclusions: list[EvidencePoint] = Field(min_length=2, max_length=3)
     physical_picture: str = Field(min_length=10, max_length=1800)
     novelty_and_significance: list[EvidencePoint] = Field(min_length=1, max_length=6)
+    research_focus_findings: list[EvidencePoint] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Findings requested by the active research-stage prompt profile.",
+    )
     tags: list[TagSuggestion] = Field(min_length=1, max_length=8)
     coverage: Coverage
     limitations: list[str] = Field(default_factory=list, max_length=12)
@@ -145,6 +150,7 @@ def render_note_html(
     model: str,
     usage: dict | None = None,
     elapsed_seconds: float | None = None,
+    focus_heading: str = "当前科研阶段重点",
 ) -> str:
     """Render validated model data; model-provided HTML is never trusted."""
 
@@ -176,6 +182,12 @@ def render_note_html(
     generated = datetime.now().astimezone().isoformat(timespec="seconds")
     usage_summary = _format_usage_summary(usage)
     duration = _format_duration(elapsed_seconds)
+    focus_html = ""
+    if result.research_focus_findings:
+        focus_html = (
+            f"<h2>4. {esc(focus_heading)}</h2>"
+            f"<ul>{points(result.research_focus_findings)}</ul>"
+        )
     return (
         '<div data-zqr-note="1" data-zqr-schema="1.0">'
         "<h1>AI 速读</h1>"
@@ -187,6 +199,7 @@ def render_note_html(
         f"<p><strong>物理图像：</strong>{esc(result.physical_picture)}</p>"
         "<h2>3. 核心卖点与重要性</h2>"
         f"<ul>{points(result.novelty_and_significance)}</ul>"
+        f"{focus_html}"
         f"<p><strong>规范标签：</strong>{tags}</p>"
         f"<p><strong>阅读覆盖：</strong>PDF 页 {esc(pages)} / 共 {coverage.total_pages} 页。</p>"
         f"<ul>{warning_html}</ul>"

@@ -43,6 +43,13 @@ def valid_result() -> dict:
                 "locations": ["Discussion, PDF p.5"],
             }
         ],
+        "research_focus_findings": [
+            {
+                "statement": "该结论决定是否值得继续精读。",
+                "evidence_kind": "author_inference",
+                "locations": ["PDF p.5"],
+            }
+        ],
         "tags": [
             {
                 "canonical": "time-resolved Kerr rotation",
@@ -97,6 +104,21 @@ def test_impossible_page_reference_fails():
             result,
             pages_read=[1, 2],
             total_pages=2,
+            warnings=[],
+            abstract_mode=False,
+        )
+    assert caught.value.code == "invalid_source_location"
+
+
+def test_impossible_research_focus_page_reference_fails():
+    data = valid_result()
+    data["research_focus_findings"][0]["locations"] = ["PDF p.99"]
+    result = parse_result(json.dumps(data, ensure_ascii=False))
+    with pytest.raises(ModelResponseError) as caught:
+        apply_ground_truth_coverage(
+            result,
+            pages_read=[1, 2, 3, 4, 5],
+            total_pages=5,
             warnings=[],
             abstract_mode=False,
         )
