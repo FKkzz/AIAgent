@@ -143,3 +143,44 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
     assert "physics-zh-v1" not in note_html
     assert "per_request" not in note_html
     assert "综合阅读重点" in note_html
+
+
+def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
+    pdf = tmp_path / "paper.pdf"
+    create_pdf(pdf)
+    db = QueueDB(tmp_path / "queue.db")
+    settings = AppSettings(
+        selected_model="available-model",
+        pdf=PdfSettings(stable_seconds=0, min_text_chars=50, chunk_chars=5000),
+    )
+    default_profile = PromptStore.builtin("physics-zh-v1")
+    selected_profile = PromptStore.builtin("method-reproduction-zh-v1")
+    job, _ = db.enqueue(
+        JobSubmit(
+            library_id=1,
+            parent_key="ABCDEFGH",
+            attachment_key="HGFEDCBA",
+            attachment_path=str(pdf),
+            title="Fake",
+        ),
+        instruction_version=selected_profile.reference,
+        model=settings.selected_model,
+        auth_mode="chatgpt",
+        max_attempts=3,
+        fingerprint=None,
+        prompt_profile=selected_profile.as_dict(include_content=True),
+    )
+    worker = JobWorker(
+        db,
+        settings,
+        lambda: FakeClient(),
+        prompt_profile=default_profile,
+    )
+
+    assert worker.process_one() is True
+    completed = db.get(job.id)
+    assert completed.result["processing"]["prompt_profile"]["id"] == (
+        "method-reproduction-zh-v1"
+    )
+    assert "复现与实验设计重点" in completed.result["note_html"]
+    assert "综合阅读重点" not in completed.result["note_html"]

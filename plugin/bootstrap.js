@@ -45,8 +45,9 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 
 		const fallbackStrings = {
 			"zqr-menu-root": "Zotero AI Quick Read",
-			"zqr-menu-generate": "Generate AI Quick Read",
-			"zqr-menu-regenerate": "Regenerate",
+			"zqr-menu-generate": "Generate with Default Method",
+			"zqr-menu-choose-prompt": "Choose Analysis Method…",
+			"zqr-menu-regenerate": "Regenerate with Default Method",
 			"zqr-menu-status": "View Status",
 			"zqr-menu-settings": "Settings",
 			"zqr-menu-auto": "Automatic processing",
@@ -56,10 +57,16 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			"zqr-settings-clear-token": "Clear token saved in preferences",
 			"zqr-settings-saved": "Settings saved.",
 			"zqr-settings-connected": "Backend connection and authentication succeeded.",
+			"zqr-settings-prompt-profile": "Choose the default analysis method. Normal and automatic tasks use this method:",
+			"zqr-settings-backend-default": "Follow backend default — {profile}",
+			"zqr-settings-connected-default": "Backend connected. Default analysis method: {profile}",
+			"zqr-prompt-select-title": "Choose Analysis Method",
+			"zqr-prompt-select-message": "Choose the analysis method for the selected paper(s). This does not change the default:",
 			"zqr-settings-health-only": "The backend is reachable, but authentication failed: {error}",
 			"zqr-settings-invalid-url": "Use an HTTP URL on 127.0.0.1 without a path, credentials, query, or fragment.",
 			"zqr-settings-invalid-token": "The token cannot contain a line break or exceed 4096 characters.",
 			"zqr-notify-submitted": "Submitted {count} quick-read task(s).",
+			"zqr-notify-submitted-profile": "Submitted {count} task(s) with “{profile}”.",
 			"zqr-notify-no-ready-pdf": "No downloaded PDF with a regular parent item was found.",
 			"zqr-notify-token-missing": "No backend token was found. Open Settings or create the plugin-token file.",
 			"zqr-notify-backend-error": "Local backend request failed: {error}",
@@ -71,6 +78,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			"zqr-status-empty": "The selected paper has no quick-read task yet.",
 			"zqr-status-line": "{title}: {status}",
 			"zqr-status-detail": "{message}",
+			"zqr-status-profile": "Analysis method: {profile}",
 			"zqr-status-waiting-fulltext": "Waiting for the PDF download",
 			"zqr-status-queued": "Queued",
 			"zqr-status-processing": "Generating",
@@ -85,8 +93,9 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 		};
 		const chineseMenuFallbackStrings = {
 			"zqr-menu-root": "Zotero 论文 AI 速读",
-			"zqr-menu-generate": "生成 AI 速读",
-			"zqr-menu-regenerate": "重新生成",
+			"zqr-menu-generate": "使用默认方法生成",
+			"zqr-menu-choose-prompt": "选择分析方法生成…",
+			"zqr-menu-regenerate": "使用默认方法重新生成",
 			"zqr-menu-status": "查看状态",
 			"zqr-menu-settings": "设置",
 		};
@@ -338,6 +347,83 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			return payload;
 		}
 
+		function cleanDialogText(value, maxLength) {
+			return String(value || "")
+				.replace(/[\r\n\t]+/g, " ")
+				.replace(/\s{2,}/g, " ")
+				.trim()
+				.slice(0, maxLength);
+		}
+
+		async function promptCatalog() {
+			const payload = await apiRequest("GET", "/api/v1/prompts", { timeout: 5000 });
+			const profiles = Array.isArray(payload?.profiles)
+				? payload.profiles.filter(profile => profile && typeof profile.id === "string"
+					&& typeof profile.name === "string")
+				: [];
+			if (!profiles.length) {
+				throw codedError("INVALID_RESPONSE", "The backend returned no prompt profiles");
+			}
+			const defaultProfile = payload?.default && typeof payload.default.id === "string"
+				? payload.default
+				: profiles[0];
+			return { profiles, defaultProfile };
+		}
+
+		function promptProfileLabel(profile) {
+			const name = cleanDialogText(profile?.name, 100) || cleanDialogText(profile?.id, 64);
+			const id = cleanDialogText(profile?.id, 64);
+			const description = cleanDialogText(profile?.description, 180);
+			return `${name} [${id}]${description ? ` — ${description}` : ""}`;
+		}
+
+		async function choosePromptProfile(window, options) {
+			options = options || {};
+			const catalog = await promptCatalog();
+			const entries = catalog.profiles.map(profile => ({
+				id: profile.id,
+				name: cleanDialogText(profile.name, 100) || profile.id,
+				profile,
+				label: promptProfileLabel(profile),
+			}));
+			if (options.includeBackendDefault) {
+				entries.unshift({
+					id: "",
+					name: cleanDialogText(catalog.defaultProfile.name, 100)
+						|| catalog.defaultProfile.id,
+					profile: catalog.defaultProfile,
+					label: await l10n("zqr-settings-backend-default", {
+						profile: promptProfileLabel(catalog.defaultProfile),
+					}, window),
+				});
+			}
+			const current = getStringPref("promptProfile", "").trim();
+			let selectedIndex = entries.findIndex(entry => entry.id === current);
+			if (selectedIndex < 0) {
+				selectedIndex = Math.max(0, entries.findIndex(entry =>
+					entry.id === catalog.defaultProfile.id));
+			}
+			const selected = { value: selectedIndex };
+			const title = await l10n(
+				options.titleID || "zqr-prompt-select-title", null, window
+			);
+			const message = await l10n(
+				options.messageID || "zqr-prompt-select-message", null, window
+			);
+			const accepted = Services.prompt.select(
+				window || null,
+				title,
+				message,
+				entries.length,
+				entries.map(entry => entry.label),
+				selected
+			);
+			if (!accepted || !entries[selected.value]) {
+				return null;
+			}
+			return entries[selected.value];
+		}
+
 		function ownerWindow(context) {
 			return context?.menuElem?.ownerGlobal || Zotero.getMainWindow() || null;
 		}
@@ -498,6 +584,15 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 							l10nID: "zqr-menu-generate",
 							onShowing: eligibility,
 							onCommand: command((items, window) => submitSelection(items, false, window)),
+						},
+						{
+							menuType: "menuitem",
+							l10nID: "zqr-menu-choose-prompt",
+							onShowing: safeShowing("zqr-menu-choose-prompt", (_event, context) => {
+								context?.setEnabled?.(selectionMayContainPDF(context.items));
+							}),
+							onCommand: command((items, window) =>
+								submitSelectionWithPromptChoice(items, window)),
 						},
 						{
 							menuType: "menuitem",
@@ -746,7 +841,15 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			return candidates;
 		}
 
-		async function submitSelection(items, force, window) {
+		async function submitSelectionWithPromptChoice(items, window) {
+			const selected = await choosePromptProfile(window);
+			if (!selected) {
+				return;
+			}
+			await submitSelection(items, false, window, selected);
+		}
+
+		async function submitSelection(items, force, window, selectedPrompt) {
 			const candidates = await candidatesFromSelection(items);
 			if (!candidates.length) {
 				await showAlert("zqr-notify-no-ready-pdf", null, window);
@@ -754,24 +857,43 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			}
 			let submitted = 0;
 			for (const candidate of candidates) {
-				await submitCandidate(candidate, force, force ? "regenerate" : "manual");
+				await submitCandidate(
+					candidate,
+					force,
+					force ? "regenerate" : "manual",
+					selectedPrompt?.id
+				);
 				submitted++;
 			}
-			await showNotification("zqr-notify-submitted", { count: submitted }, window, false);
+			await showNotification(
+				selectedPrompt ? "zqr-notify-submitted-profile" : "zqr-notify-submitted",
+				selectedPrompt
+					? { count: submitted, profile: selectedPrompt.name }
+					: { count: submitted },
+				window,
+				false
+			);
 		}
 
-		async function submitCandidate(candidate, force, source) {
+		async function submitCandidate(candidate, force, source, promptProfileID) {
 			const parent = candidate.parent;
 			const attachment = candidate.attachment;
+			const selectedPromptID = promptProfileID === undefined
+				? getStringPref("promptProfile", "").trim()
+				: String(promptProfileID || "").trim();
+			const body = {
+				library_id: parent.libraryID,
+				parent_key: parent.key,
+				attachment_key: attachment.key,
+				attachment_path: candidate.path,
+				title: String(parent.getField("title") || attachment.attachmentFilename || "").slice(0, 1000),
+				force: Boolean(force),
+			};
+			if (selectedPromptID) {
+				body.prompt_profile = selectedPromptID;
+			}
 			const response = await apiRequest("POST", "/api/v1/jobs", {
-				body: {
-					library_id: parent.libraryID,
-					parent_key: parent.key,
-					attachment_key: attachment.key,
-					attachment_path: candidate.path,
-					title: String(parent.getField("title") || attachment.attachmentFilename || "").slice(0, 1000),
-					force: Boolean(force),
-				},
+				body,
 				timeout: 30000,
 			});
 			const job = response?.job;
@@ -797,6 +919,12 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				createdAt: String(job.created_at || previous.createdAt || ""),
 				updatedAt: String(job.updated_at || new Date().toISOString()),
 				forceGeneration: Boolean(job.force_generation),
+				promptProfileID: job.prompt_profile?.id
+					? String(job.prompt_profile.id).slice(0, 64)
+					: previous.promptProfileID || null,
+				promptProfileName: job.prompt_profile?.name
+					? String(job.prompt_profile.name).slice(0, 200)
+					: previous.promptProfileName || null,
 				source: source || previous.source || "backend-sync",
 				applyError: previous.applyError || null,
 			};
@@ -1184,7 +1312,24 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				}
 				try {
 					await apiRequest("GET", "/api/v1/info", { timeout: 5000 });
-					await showNotification("zqr-settings-connected", null, window, false);
+					const selected = await choosePromptProfile(window, {
+						includeBackendDefault: true,
+						titleID: "zqr-dialog-title",
+						messageID: "zqr-settings-prompt-profile",
+					});
+					if (selected) {
+						setStringPref("promptProfile", selected.id);
+						await showNotification("zqr-settings-connected-default", {
+							profile: selected.id
+								? selected.name
+								: await l10n("zqr-settings-backend-default", {
+									profile: selected.name,
+								}, window),
+						}, window, false);
+					}
+					else {
+						await showNotification("zqr-settings-connected", null, window, false);
+					}
 				}
 				catch (error) {
 					await showAlert("zqr-settings-health-only", { error: safeError(error) }, window);
@@ -1279,6 +1424,11 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 					status: await localizedStatus(job, window),
 				}, window));
 				const detail = job.applyError || job.message || job.errorCode;
+				if (job.promptProfileName || job.promptProfileID) {
+					lines.push("  " + await l10n("zqr-status-profile", {
+						profile: job.promptProfileName || job.promptProfileID,
+					}, window));
+				}
 				if (detail) {
 					lines.push("  " + await l10n("zqr-status-detail", {
 						message: String(detail).slice(0, 500),

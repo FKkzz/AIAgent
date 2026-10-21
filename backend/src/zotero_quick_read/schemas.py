@@ -107,6 +107,10 @@ class JobSubmit(BaseModel):
     title: str = Field(default="", max_length=1000)
     model: str | None = None
     auth_mode: Literal["chatgpt", "api_key"] | None = None
+    prompt_profile: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9._-]{1,63}$",
+    )
     force: bool = False
     abstract_mode: bool = False
     abstract: str | None = Field(default=None, max_length=20000)
@@ -131,6 +135,7 @@ class JobRecord(BaseModel):
     title: str
     fingerprint: str | None = None
     instruction_version: str
+    prompt_profile: dict | None = None
     model: str | None = None
     auth_mode: str
     attempts: int

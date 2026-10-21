@@ -133,12 +133,13 @@ def create_app(
     @app.get("/api/v1/info", dependencies=protected)
     def info():
         settings = active.settings
+        prompt_profile = active.prompt_store.resolve(settings.output.prompt_profile)
         return {
             "version": __version__,
             "auth_mode": settings.auth_mode,
             "selected_model": settings.selected_model,
-            "prompt_profile": active.prompt_profile.as_dict(),
-            "prompt_version": active.prompt_profile.reference,
+            "prompt_profile": prompt_profile.as_dict(),
+            "prompt_version": prompt_profile.reference,
             "proxy": {
                 "enabled": settings.proxy.enabled,
                 "version": settings.proxy.version,
@@ -153,8 +154,29 @@ def create_app(
             "token_file": str(token_file_path(active.data_dir)),
         }
 
+    @app.get("/api/v1/prompts", dependencies=protected)
+    def prompts():
+        profiles = active.prompt_store.list()
+        default_id = active.settings.output.prompt_profile
+        default_profile = next(
+            (profile for profile in profiles if profile.id == default_id),
+            None,
+        )
+        if default_profile is None:
+            raise QuickReadError(
+                "prompt_profile_not_found",
+                f"后台默认提示词方案不存在：{default_id}。请先运行 prompt use 选择有效方案。",
+            )
+        return {
+            "default": default_profile.as_dict(),
+            "profiles": [profile.as_dict() for profile in profiles],
+        }
+
     @app.post("/api/v1/jobs", dependencies=protected)
     def submit_job(payload: JobSubmit):
+        prompt_profile = active.prompt_store.resolve(
+            payload.prompt_profile or active.settings.output.prompt_profile
+        )
         fingerprint = None
         attachment = Path(payload.attachment_path)
         if (
@@ -167,11 +189,12 @@ def create_app(
         auth_mode = payload.auth_mode or active.settings.auth_mode
         job, created = active.db.enqueue(
             payload,
-            instruction_version=active.prompt_profile.reference,
+            instruction_version=prompt_profile.reference,
             model=model,
             auth_mode=auth_mode,
             max_attempts=active.settings.max_attempts,
             fingerprint=fingerprint,
+            prompt_profile=prompt_profile.as_dict(include_content=True),
         )
         active.worker.wake()
         return {"job": job.model_dump(mode="json"), "created": created}

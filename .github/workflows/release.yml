@@ -34,5 +34,5 @@ jobs:
           files: |
             dist/ZoteroQuickRead.exe
             dist/ZoteroQuickRead.exe.sha256
-            dist/zotero-quick-read-2.3.0.xpi
-            dist/zotero-quick-read-2.3.0.xpi.sha256
+            dist/zotero-quick-read-2.4.0.xpi
+            dist/zotero-quick-read-2.4.0.xpi.sha256

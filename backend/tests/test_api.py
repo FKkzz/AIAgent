@@ -39,6 +39,25 @@ def test_protected_endpoint_rejects_missing_or_bad_token(tmp_path: Path):
     assert info["prompt_version"].startswith("physics-zh-v1@1.0.0+")
 
 
+def test_prompt_catalog_exposes_local_profiles_and_default(tmp_path: Path):
+    runtime, client = client_for(tmp_path)
+    headers = {"Authorization": f"Bearer {runtime.local_token}"}
+
+    response = client.get("/api/v1/prompts", headers=headers)
+
+    assert response.status_code == 200
+    catalog = response.json()
+    assert catalog["default"]["id"] == "physics-zh-v1"
+    assert {profile["id"] for profile in catalog["profiles"]} == {
+        "physics-zh-v1",
+        "literature-survey-zh-v1",
+        "method-reproduction-zh-v1",
+        "critical-review-zh-v1",
+    }
+    assert all(profile["source"] == "local" for profile in catalog["profiles"])
+    assert all("content" not in profile for profile in catalog["profiles"])
+
+
 def test_browser_origin_is_rejected_even_with_token(tmp_path: Path):
     runtime, client = client_for(tmp_path)
     response = client.get(
@@ -70,6 +89,76 @@ def test_submit_and_deduplicate_job(tmp_path: Path):
     assert first.json()["created"] is True
     assert second.json()["created"] is False
     assert first.json()["job"]["id"] == second.json()["job"]["id"]
+
+
+def test_submit_can_override_prompt_profile_per_job(tmp_path: Path):
+    runtime, client = client_for(tmp_path)
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF placeholder")
+    headers = {"Authorization": f"Bearer {runtime.local_token}"}
+    payload = {
+        "library_id": 1,
+        "parent_key": "ABCDEFGH",
+        "attachment_key": "HGFEDCBA",
+        "attachment_path": str(pdf),
+        "title": "Paper",
+        "prompt_profile": "method-reproduction-zh-v1",
+    }
+
+    response = client.post("/api/v1/jobs", json=payload, headers=headers)
+
+    assert response.status_code == 200
+    job = response.json()["job"]
+    assert job["prompt_profile"]["id"] == "method-reproduction-zh-v1"
+    assert job["instruction_version"].startswith("method-reproduction-zh-v1@1.0.0+")
+    assert "content" not in job["prompt_profile"]
+    snapshot = runtime.db.payload(job["id"])["prompt_profile"]
+    assert snapshot["id"] == "method-reproduction-zh-v1"
+    assert "# 角色与输出目标" in snapshot["content"]
+
+
+def test_different_prompt_profiles_do_not_deduplicate(tmp_path: Path):
+    runtime, client = client_for(tmp_path)
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF placeholder")
+    headers = {"Authorization": f"Bearer {runtime.local_token}"}
+    payload = {
+        "library_id": 1,
+        "parent_key": "ABCDEFGH",
+        "attachment_key": "HGFEDCBA",
+        "attachment_path": str(pdf),
+        "title": "Paper",
+    }
+
+    default = client.post("/api/v1/jobs", json=payload, headers=headers)
+    method = client.post(
+        "/api/v1/jobs",
+        json={**payload, "prompt_profile": "method-reproduction-zh-v1"},
+        headers=headers,
+    )
+
+    assert default.json()["created"] is True
+    assert method.json()["created"] is True
+    assert default.json()["job"]["id"] != method.json()["job"]["id"]
+
+
+def test_unknown_prompt_profile_is_rejected(tmp_path: Path):
+    runtime, client = client_for(tmp_path)
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF placeholder")
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "library_id": 1,
+            "parent_key": "ABCDEFGH",
+            "attachment_path": str(pdf),
+            "prompt_profile": "missing-profile",
+        },
+        headers={"Authorization": f"Bearer {runtime.local_token}"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "prompt_profile_not_found"
 
 
 def test_token_file_is_not_written_to_settings(tmp_path: Path):

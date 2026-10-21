@@ -52,6 +52,7 @@ class QueueDB:
                     abstract_text TEXT,
                     fingerprint TEXT,
                     instruction_version TEXT NOT NULL,
+                    prompt_profile_json TEXT,
                     model TEXT,
                     auth_mode TEXT NOT NULL,
                     status TEXT NOT NULL,
@@ -80,6 +81,11 @@ class QueueDB:
                 );
                 """
             )
+            columns = {
+                row["name"] for row in db.execute("PRAGMA table_info(jobs)").fetchall()
+            }
+            if "prompt_profile_json" not in columns:
+                db.execute("ALTER TABLE jobs ADD COLUMN prompt_profile_json TEXT")
 
     def recover_interrupted(self) -> int:
         now = utc_now()
@@ -105,6 +111,7 @@ class QueueDB:
         auth_mode: str,
         max_attempts: int,
         fingerprint: str | None,
+        prompt_profile: dict | None = None,
     ) -> tuple[JobRecord, bool]:
         job_id = str(uuid.uuid4())
         basis = {
@@ -124,6 +131,11 @@ class QueueDB:
         attachment_ready = request.abstract_mode or Path(request.attachment_path).is_file()
         status = "queued" if attachment_ready else "waiting_fulltext"
         now = utc_now()
+        prompt_profile_json = (
+            json.dumps(prompt_profile, ensure_ascii=False, separators=(",", ":"))
+            if prompt_profile is not None
+            else None
+        )
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             existing = db.execute("SELECT * FROM jobs WHERE dedupe_key=?", (dedupe_key,)).fetchone()
@@ -135,9 +147,9 @@ class QueueDB:
                 INSERT INTO jobs (
                     id, dedupe_key, library_id, parent_key, attachment_key, attachment_path,
                     title, abstract_mode, abstract_text, fingerprint, instruction_version,
-                    model, auth_mode, status, max_attempts, force_generation,
-                    next_attempt_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    prompt_profile_json, model, auth_mode, status, max_attempts,
+                    force_generation, next_attempt_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -151,6 +163,7 @@ class QueueDB:
                     request.abstract,
                     fingerprint,
                     instruction_version,
+                    prompt_profile_json,
                     model,
                     auth_mode,
                     status,
@@ -285,9 +298,17 @@ class QueueDB:
     def payload(self, job_id: str) -> dict | None:
         with self.connect() as db:
             row = db.execute(
-                "SELECT abstract_mode, abstract_text FROM jobs WHERE id=?", (job_id,)
+                """SELECT abstract_mode, abstract_text, prompt_profile_json
+                   FROM jobs WHERE id=?""",
+                (job_id,),
             ).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        payload = dict(row)
+        payload["prompt_profile"] = _decode_prompt_profile(
+            payload.pop("prompt_profile_json", None)
+        )
+        return payload
 
     def resume(self, job_id: str) -> JobRecord | None:
         now = utc_now()
@@ -354,6 +375,9 @@ class QueueDB:
     @staticmethod
     def _record(row: sqlite3.Row) -> JobRecord:
         result = json.loads(row["result_json"]) if row["result_json"] else None
+        prompt_profile = _decode_prompt_profile(row["prompt_profile_json"])
+        if prompt_profile:
+            prompt_profile.pop("content", None)
         return JobRecord(
             id=row["id"],
             status=row["status"],
@@ -364,6 +388,7 @@ class QueueDB:
             title=row["title"],
             fingerprint=row["fingerprint"],
             instruction_version=row["instruction_version"],
+            prompt_profile=prompt_profile,
             model=row["model"],
             auth_mode=row["auth_mode"],
             attempts=row["attempts"],
@@ -376,3 +401,13 @@ class QueueDB:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+
+def _decode_prompt_profile(value: str | None) -> dict | None:
+    if not value:
+        return None
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return decoded if isinstance(decoded, dict) else None

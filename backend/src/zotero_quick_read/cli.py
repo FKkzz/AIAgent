@@ -523,6 +523,7 @@ def _read_preview(args: argparse.Namespace, data_dir: Path) -> int:
         auth_mode=args.auth_mode or runtime.settings.auth_mode,
         max_attempts=runtime.settings.max_attempts,
         fingerprint=None,
+        prompt_profile=runtime.prompt_profile.as_dict(include_content=True),
     )
     runtime.worker.start()
     deadline = time.monotonic() + args.timeout

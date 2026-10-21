@@ -17,7 +17,13 @@ from .pdf import (
     extract_pdf,
     render_relevant_pages,
 )
-from .prompting import PromptProfile, PromptStore, chunk_instructions, final_instructions
+from .prompting import (
+    PromptProfile,
+    PromptStore,
+    chunk_instructions,
+    final_instructions,
+    parse_prompt_profile,
+)
 from .result_parser import apply_ground_truth_coverage, normalize_tags, parse_result
 from .schemas import JobRecord, render_note_html
 
@@ -102,6 +108,7 @@ class JobWorker:
                     "尚未选择模型。请先运行 models 并在设置中保存账号实际可用的模型。",
                 )
             payload = self.db.payload(job.id) or {}
+            prompt_profile = self._prompt_profile_for_job(job, payload)
             abstract_mode = bool(payload.get("abstract_mode"))
             warnings: list[str] = []
             rendered_pages: list[RenderedPage] = []
@@ -142,7 +149,7 @@ class JobWorker:
                     reply = _coerce_result(
                         client.respond(
                             model=model,
-                            instructions=chunk_instructions(self.prompt_profile),
+                            instructions=chunk_instructions(prompt_profile),
                             input_content=(
                                 f"论文标题：{job.title}\n"
                                 f"这是全文分段 {index}/{len(chunks)}。"
@@ -156,7 +163,14 @@ class JobWorker:
                     if reply.response_id:
                         response_ids.append(reply.response_id)
                 evidence_text = self._reduce_evidence(
-                    client, model, job.auth_mode, extracted, usage_events, response_ids, job.id
+                    client,
+                    model,
+                    job.auth_mode,
+                    extracted,
+                    usage_events,
+                    response_ids,
+                    job.id,
+                    prompt_profile,
                 )
 
             self._check_cancelled(job.id)
@@ -185,7 +199,7 @@ class JobWorker:
                     instructions=final_instructions(
                         self.settings.output.target_min_chinese_chars,
                         self.settings.output.target_max_chinese_chars,
-                        self.prompt_profile,
+                        prompt_profile,
                     ),
                     input_content=final_input,
                     auth_mode=job.auth_mode,
@@ -210,7 +224,7 @@ class JobWorker:
                 model=model,
                 usage=usage,
                 elapsed_seconds=elapsed_seconds,
-                focus_heading=self.prompt_profile.note_heading,
+                focus_heading=prompt_profile.note_heading,
             )
             result = {
                 "schema_version": "1.0",
@@ -229,7 +243,7 @@ class JobWorker:
                     "model": model,
                     "auth_mode": job.auth_mode,
                     "instruction_version": job.instruction_version,
-                    "prompt_profile": self.prompt_profile.as_dict(),
+                    "prompt_profile": prompt_profile.as_dict(),
                     "fingerprint": fingerprint,
                     "usage": usage,
                     "elapsed_seconds": elapsed_seconds,
@@ -302,6 +316,7 @@ class JobWorker:
         usage_events: list[dict],
         response_ids: list[str],
         job_id: str,
+        prompt_profile: PromptProfile,
     ) -> str:
         limit = self.settings.pdf.chunk_chars
         generation = 0
@@ -329,7 +344,7 @@ class JobWorker:
                 reply = _coerce_result(
                     client.respond(
                         model=model,
-                        instructions=chunk_instructions(self.prompt_profile),
+                        instructions=chunk_instructions(prompt_profile),
                         input_content=(
                             f"合并第 {generation} 轮、第 {index}/{len(groups)} 组事实。"
                             "保留所有关键条件、相互冲突信息和 PDF 页码；不要生成最终总结。\n\n"
@@ -351,6 +366,22 @@ class JobWorker:
                 )
             parts = reduced
         return "\n\n".join(parts)
+
+    def _prompt_profile_for_job(
+        self,
+        job: JobRecord,
+        payload: dict,
+    ) -> PromptProfile:
+        snapshot = payload.get("prompt_profile")
+        content = snapshot.get("content") if isinstance(snapshot, dict) else None
+        if isinstance(content, str) and content.strip():
+            return parse_prompt_profile(
+                content,
+                source="job_snapshot",
+                path=f"queue:{job.id}",
+            )
+        # Jobs created by releases before per-job profiles have no snapshot.
+        return self.prompt_profile
 
     def _check_cancelled(self, job_id: str) -> None:
         if self._stop.is_set() or self.db.is_cancelled(job_id):

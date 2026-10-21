@@ -66,3 +66,45 @@ def test_cancelled_job_is_not_claimed(tmp_path: Path):
     cancelled = db.request_cancel(job.id)
     assert cancelled.status == "cancelled"
     assert db.claim_next() is None
+
+
+def test_prompt_snapshot_is_private_but_available_to_worker(tmp_path: Path):
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-placeholder")
+    db = QueueDB(tmp_path / "queue.db")
+    snapshot = {
+        "id": "my-method",
+        "name": "My method",
+        "reference": "my-method@1+abc",
+        "content": "secret prompt body",
+    }
+    job, _ = db.enqueue(
+        request(pdf),
+        instruction_version="my-method@1+abc",
+        model="model-from-account",
+        auth_mode="chatgpt",
+        max_attempts=3,
+        fingerprint="a" * 64,
+        prompt_profile=snapshot,
+    )
+
+    assert job.prompt_profile == {
+        "id": "my-method",
+        "name": "My method",
+        "reference": "my-method@1+abc",
+    }
+    assert db.payload(job.id)["prompt_profile"] == snapshot
+
+
+def test_existing_database_is_migrated_for_prompt_snapshots(tmp_path: Path):
+    path = tmp_path / "queue.db"
+    db = QueueDB(path)
+    with db.connect() as connection:
+        connection.execute("ALTER TABLE jobs DROP COLUMN prompt_profile_json")
+
+    migrated = QueueDB(path)
+    with migrated.connect() as connection:
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(jobs)").fetchall()
+        }
+    assert "prompt_profile_json" in columns

@@ -4,13 +4,14 @@
 Zotero 9 plugin
   ├─ item/attachment notifier
   ├─ local Bearer authentication
+  ├─ default/per-paper prompt selection
   ├─ task submit/status polling
   └─ validated note + additive tags
              │ HTTP 127.0.0.1:23120
              ▼
 Local backend
   ├─ FastAPI loopback boundary
-  ├─ SQLite WAL queue (single worker)
+  ├─ SQLite WAL queue + per-job prompt snapshot (single worker)
   ├─ PyMuPDF page text/captions/images
   ├─ versioned reading instructions + JSON Schema
   ├─ explicit ChatGPT or API-key auth
@@ -37,6 +38,6 @@ An EOF, cancellation, `response.failed`, `response.incomplete`, validation failu
 
 ## Deduplication and recovery
 
-The queue key includes library ID, parent key, attachment identity/content information, prompt version, model, auth mode, and abstract/full-text mode. Forced regeneration uses a unique key. Processing rows are returned to `queued` after backend restart.
+The queue key includes library ID, parent key, attachment identity/content information, the selected prompt content reference, model, auth mode, and abstract/full-text mode. Forced regeneration uses a unique key. Each row persists the complete editable prompt profile used at submission, so later profile edits or deletion cannot alter queued work. Pre-2.4 databases gain the snapshot column automatically, and legacy rows fall back to the backend default. Processing rows are returned to `queued` after backend restart.
 
 The plugin maintains local job/application records. It hashes the exact normalized note content after writing. A later regeneration overwrites only if that hash still matches; otherwise it preserves the edited note and creates a new one.
