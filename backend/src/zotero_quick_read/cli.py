@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     prompt = commands.add_parser("prompt", help="Manage research-stage prompt profiles")
     prompt_commands = prompt.add_subparsers(dest="prompt_command", required=True)
-    prompt_commands.add_parser("list", help="List built-in and custom prompt profiles")
+    prompt_commands.add_parser("list", help="List local prompt profiles")
     prompt_show = prompt_commands.add_parser("show", help="Show a prompt profile")
     prompt_show.add_argument("profile", nargs="?")
     prompt_show.add_argument(
@@ -86,8 +86,10 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_create.add_argument("--from", dest="from_profile")
     prompt_use = prompt_commands.add_parser("use", help="Select a prompt profile")
     prompt_use.add_argument("profile")
-    prompt_edit = prompt_commands.add_parser("edit", help="Open a custom profile in Notepad")
+    prompt_edit = prompt_commands.add_parser("edit", help="Open a profile in Notepad")
     prompt_edit.add_argument("profile", nargs="?")
+    prompt_delete = prompt_commands.add_parser("delete", help="Delete a profile recoverably")
+    prompt_delete.add_argument("profile")
 
     serve = commands.add_parser("serve", help="Run the loopback service")
     serve.add_argument("--log-level", default="info", choices=("error", "warning", "info", "debug"))
@@ -405,7 +407,9 @@ def _dispatch_prompt(
             {
                 "ok": True,
                 "selected": selected,
+                "prompt_directory": str(store.custom_dir),
                 "custom_directory": str(store.custom_dir),
+                "trash_directory": str(store.trash_dir),
                 "profiles": [
                     {**profile.as_dict(), "selected": profile.id == selected}
                     for profile in store.list()
@@ -459,12 +463,6 @@ def _dispatch_prompt(
         return 0
     if args.prompt_command == "edit":
         profile = store.resolve(args.profile or selected)
-        if not profile.editable:
-            raise QuickReadError(
-                "builtin_prompt_not_editable",
-                "内置方案只读。请先运行 "
-                f"prompt create my-profile --from {profile.id}，再编辑新方案。",
-            )
         if os.name != "nt":
             raise QuickReadError(
                 "prompt_editor_unavailable",
@@ -477,6 +475,31 @@ def _dispatch_prompt(
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
         _print_json({"ok": True, "opened": profile.path, "profile": profile.id})
+        return 0
+    if args.prompt_command == "delete":
+        profile, trash_path = store.delete(args.profile)
+        remaining = store.list()
+        selected_after = selected
+        restart_required = profile.id == selected
+        if restart_required:
+            preferred = next(
+                (item for item in remaining if item.id == "physics-zh-v1"),
+                remaining[0],
+            )
+            selected_after = preferred.id
+            settings_store.update({"output": {"prompt_profile": selected_after}})
+        _print_json(
+            {
+                "ok": True,
+                "deleted": profile.id,
+                "recoverable_from": str(trash_path),
+                "selected": selected_after,
+                "restart_required": restart_required,
+                "restart_command": (
+                    "ZoteroQuickRead.exe restart" if restart_required else None
+                ),
+            }
+        )
         return 0
     raise AssertionError(args.prompt_command)
 

@@ -29,8 +29,8 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $manifest = Get-Content -LiteralPath (Join-Path $pluginDir "manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($manifest.version -ne "2.2.0") {
-    throw "Expected plugin version 2.2.0, found '$($manifest.version)'"
+if ($manifest.version -ne "2.3.0") {
+    throw "Expected plugin version 2.3.0, found '$($manifest.version)'"
 }
 if ($manifest.applications.zotero.strict_min_version -ne "9.0.6" -or
     $manifest.applications.zotero.strict_max_version -ne "9.0.*") {

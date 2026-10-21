@@ -2,14 +2,14 @@
 
 Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给本地后台处理，并在父文献条目下生成中文“AI 速读”子笔记和规范标签。
 
-当前正式版本：`2.2.0`。`2.0.0` 是替换旧软件的完整重构版；`2.2.0` 新增可查看、切换、复制和维护的科研阶段提示词方案。详见 [CHANGELOG.md](CHANGELOG.md)。
+当前正式版本：`2.3.0`。`2.0.0` 是替换旧软件的完整重构版；`2.3.0` 将全部提示词方案改为可增添、修改和删除的本地文件。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 先认识三个文件
 
 | 文件 | 用途 |
 |---|---|
 | `dist/ZoteroQuickRead.exe` | Windows 本地后台；正式版可从 GitHub Release 下载 |
-| `dist/zotero-quick-read-2.2.0.xpi` | 安装到 Zotero 的插件 |
+| `dist/zotero-quick-read-2.3.0.xpi` | 安装到 Zotero 的插件 |
 | `README.md` | 你正在阅读的使用教程 |
 
 默认后台地址是 `http://127.0.0.1:23120`。不要使用 Zotero Connector 占用的 `23119`。
@@ -33,8 +33,8 @@ Windows 本地运行的 Zotero 论文速读工具。把带 PDF 的论文交给�
 
 - `ZoteroQuickRead.exe`
 - `ZoteroQuickRead.exe.sha256`
-- `zotero-quick-read-2.2.0.xpi`
-- `zotero-quick-read-2.2.0.xpi.sha256`
+- `zotero-quick-read-2.3.0.xpi`
+- `zotero-quick-read-2.3.0.xpi.sha256`
 
 把 EXE 和 XPI 放进同一个新目录，例如 `D:\ZoteroQuickRead`。打开 PowerShell，进入该目录：
 
@@ -177,7 +177,7 @@ oidc_and_jwks         ok
 .\dist\ZoteroQuickRead.exe start
 ```
 
-`start` 会打开一个标题为 `Zotero Quick Read 2.2.0 - RUNNING` 的状态窗口，然后立即返回原 PowerShell 提示符。状态窗口会显示后台地址和关闭命令，可以安全地最小化；关闭该窗口会停止后台。返回原 PowerShell 提示符不代表后台已经关闭。检查当前状态：
+`start` 会打开一个标题为 `Zotero Quick Read 2.3.0 - RUNNING` 的状态窗口，然后立即返回原 PowerShell 提示符。状态窗口会显示后台地址和关闭命令，可以安全地最小化；关闭该窗口会停止后台。返回原 PowerShell 提示符不代表后台已经关闭。检查当前状态：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe status
@@ -206,13 +206,13 @@ oidc_and_jwks         ok
 
 ### 第 8 步：安装或升级 Zotero 插件
 
-安装文件位于项目目录的 `dist\zotero-quick-read-2.2.0.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.2.0.xpi`。
+安装文件位于项目目录的 `dist\zotero-quick-read-2.3.0.xpi`。本机当前完整路径是 `D:\CodeWorkspace\AIAgent\dist\zotero-quick-read-2.3.0.xpi`。
 
 1. 打开 Zotero。
 2. 进入“工具 → 插件”。
 3. 点击右上角齿轮。
 4. 选择“从文件安装插件”。
-5. 选择 `zotero-quick-read-2.2.0.xpi`。
+5. 选择 `zotero-quick-read-2.3.0.xpi`。
 6. 如果已安装旧版，确认替换，然后完整退出并重新打开 Zotero。
 
 插件默认读取 `%LOCALAPPDATA%\ZoteroQuickRead\plugin-token`，通常不需要手工复制 Token。
@@ -272,7 +272,7 @@ cd D:\CodeWorkspace\AIAgent
 - 说明核心卖点、重要性、阅读覆盖范围和局限，并给出带 PDF 页码的依据；
 - 生成 4–6 个规范标签，并额外列出 2–4 条“综合阅读重点”。
 
-查看当前选择和所有内置方案：
+查看当前选择和本地方案库：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe prompt list
@@ -290,7 +290,9 @@ cd D:\CodeWorkspace\AIAgent
 .\dist\ZoteroQuickRead.exe prompt show --compiled
 ```
 
-程序自带四个适合不同科研阶段的方案：
+可编辑方案包含角色、语言、分析目标、侧重点和长文分段提取重点；程序不再把具体物理分析要求藏在不可编辑的基础 Prompt 中。完整指令里仍会附加一小段不可删除的运行协议，只负责防止 PDF 内提示词注入、禁止编造、约束 JSON 格式并校验真实页码，它不规定你的科研目标。
+
+首次升级时，程序会把四个初始方案复制到本地方案库。它们只是可自由修改和删除的起点：
 
 | 方案 ID | 适用阶段 | 重点 |
 |---|---|---|
@@ -306,7 +308,20 @@ cd D:\CodeWorkspace\AIAgent
 .\dist\ZoteroQuickRead.exe restart
 ```
 
-内置方案是只读的，避免升级软件时覆盖你的修改。建立自己的项目方案时，先复制最接近的内置方案：
+所有方案都保存在 `%LOCALAPPDATA%\ZoteroQuickRead\prompts\`，包括最初提供的四个方案。直接修改当前方案：
+
+```powershell
+.\dist\ZoteroQuickRead.exe prompt edit
+.\dist\ZoteroQuickRead.exe restart
+```
+
+也可以指定要修改的方案：
+
+```powershell
+.\dist\ZoteroQuickRead.exe prompt edit physics-zh-v1
+```
+
+建立新方案时，可以复制任意现有方案：
 
 ```powershell
 .\dist\ZoteroQuickRead.exe prompt create ultrafast-magnetism-v1 --from method-reproduction-zh-v1
@@ -314,6 +329,14 @@ cd D:\CodeWorkspace\AIAgent
 ```
 
 第二条命令会用记事本打开 `%LOCALAPPDATA%\ZoteroQuickRead\prompts\ultrafast-magnetism-v1.md`。文件分成两部分：顶部元数据中的 `name`、`description`、`note_heading` 和 `chunk_focus` 控制名称、说明、笔记小节标题及长文分段提取重点；`---` 之后的 Markdown 正文定义最终综合分析目标。建议把项目、研究阶段或问题写进正文，但不要要求模型编造论文中没有的信息。
+
+删除不需要的方案：
+
+```powershell
+.\dist\ZoteroQuickRead.exe prompt delete critical-review-zh-v1
+```
+
+删除采用可恢复方式：文件会移动到 `%LOCALAPPDATA%\ZoteroQuickRead\prompts-trash\`，不会在下次启动时被重新创建。如果删除的是当前方案，程序会自动选择一个剩余方案，并提示执行 `restart`。为保证程序仍能分析 PDF，最后一个方案不能删除；请先创建新方案再删除它。
 
 修改并保存后，选择它并重启：
 
@@ -323,13 +346,13 @@ cd D:\CodeWorkspace\AIAgent
 .\dist\ZoteroQuickRead.exe prompt show
 ```
 
-每次做有意义的修改时，建议递增文件顶部的 `version`，例如从 `1.0.0-custom` 改为 `1.1.0-custom`。程序还会根据提示词内容自动计算短哈希；即使忘记改版本号，修改后的任务也不会与旧提示词结果错误去重。新方案只影响之后提交的任务，已经生成的 Zotero 笔记不会自动重写；需要更新旧论文时，在 Zotero 中选择“重新生成”。
+每次做有意义的修改时，建议递增文件顶部的 `version`，例如从 `1.0.0` 改为 `1.1.0`。不要直接修改 `id`；如果需要新 ID，请使用 `prompt create` 后删除旧方案。程序还会根据提示词内容自动计算短哈希；即使忘记改版本号，修改后的任务也不会与旧提示词结果错误去重。修改只影响之后提交的任务，已经生成的 Zotero 笔记不会自动重写；需要更新旧论文时，在 Zotero 中选择“重新生成”。
 
 ## 常见问题
 
 ### 启用插件后右键无反应，或“查看”等菜单文字缺失
 
-2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。请安装当前的 `dist/zotero-quick-read-2.2.0.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
+2.0.1 虽然修正了 Fluent `.label`，但其 XPI 打包方式遗漏了 `locale/` 目录条目，导致 Zotero 9.0.6 仍无法注册本地化文件。该问题已在 2.0.2 修复。请安装当前的 `dist/zotero-quick-read-2.3.0.xpi`，然后完整退出并重启 Zotero；仅关闭窗口但进程仍在后台时不算完整重启。
 
 ### `unsupported_country_region_territory`
 
@@ -439,7 +462,7 @@ cd D:\CodeWorkspace\AIAgent
 
 ## 阅读规则与标签词表
 
-- 阅读指令：[reading-instructions-v1.md](backend/src/zotero_quick_read/resources/reading-instructions-v1.md)
+- 固定运行协议：[runtime-protocol-v2.md](backend/src/zotero_quick_read/resources/runtime-protocol-v2.md)
 - 默认提示词方案：[prompt-profile-physics-zh-v1.md](backend/src/zotero_quick_read/resources/prompt-profile-physics-zh-v1.md)
 - 文献调研方案：[prompt-profile-literature-survey-zh-v1.md](backend/src/zotero_quick_read/resources/prompt-profile-literature-survey-zh-v1.md)
 - 方法复现方案：[prompt-profile-method-reproduction-zh-v1.md](backend/src/zotero_quick_read/resources/prompt-profile-method-reproduction-zh-v1.md)

@@ -35,7 +35,7 @@ def test_protected_endpoint_rejects_missing_or_bad_token(tmp_path: Path):
     assert ok.status_code == 200
     info = ok.json()
     assert info["prompt_profile"]["id"] == "physics-zh-v1"
-    assert info["prompt_profile"]["source"] == "builtin"
+    assert info["prompt_profile"]["source"] == "local"
     assert info["prompt_version"].startswith("physics-zh-v1@1.0.0+")
 
 
