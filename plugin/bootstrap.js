@@ -374,7 +374,16 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			const name = cleanDialogText(profile?.name, 100) || cleanDialogText(profile?.id, 64);
 			const id = cleanDialogText(profile?.id, 64);
 			const description = cleanDialogText(profile?.description, 180);
-			return `${name} [${id}]${description ? ` — ${description}` : ""}`;
+			const targetMin = Number(profile?.effective_target_min_chinese_chars);
+			const targetMax = Number(profile?.effective_target_max_chinese_chars);
+			const hasTarget = Number.isInteger(targetMin) && Number.isInteger(targetMax);
+			const locale = String(
+				Zotero.locale || Services.locale.appLocaleAsBCP47 || ""
+			).toLowerCase();
+			const length = hasTarget
+				? ` · ${targetMin}–${targetMax} ${locale.startsWith("zh") ? "字" : "Chinese chars"}`
+				: "";
+			return `${name} [${id}]${description ? ` — ${description}` : ""}${length}`;
 		}
 
 		async function choosePromptProfile(window, options) {

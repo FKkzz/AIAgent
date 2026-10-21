@@ -109,6 +109,10 @@ class JobWorker:
                 )
             payload = self.db.payload(job.id) or {}
             prompt_profile = self._prompt_profile_for_job(job, payload)
+            target_min, target_max = prompt_profile.output_target(
+                self.settings.output.target_min_chinese_chars,
+                self.settings.output.target_max_chinese_chars,
+            )
             abstract_mode = bool(payload.get("abstract_mode"))
             warnings: list[str] = []
             rendered_pages: list[RenderedPage] = []
@@ -244,6 +248,15 @@ class JobWorker:
                     "auth_mode": job.auth_mode,
                     "instruction_version": job.instruction_version,
                     "prompt_profile": prompt_profile.as_dict(),
+                    "target_chinese_chars": {
+                        "min": target_min,
+                        "max": target_max,
+                        "source": (
+                            "prompt_profile"
+                            if prompt_profile.target_min_chinese_chars is not None
+                            else "global_default"
+                        ),
+                    },
                     "fingerprint": fingerprint,
                     "usage": usage,
                     "elapsed_seconds": elapsed_seconds,

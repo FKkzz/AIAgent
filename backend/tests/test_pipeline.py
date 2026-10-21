@@ -6,7 +6,7 @@ import pymupdf as fitz
 from zotero_quick_read.config import AppSettings, PdfSettings
 from zotero_quick_read.db import QueueDB
 from zotero_quick_read.pipeline import InferenceResult, JobWorker
-from zotero_quick_read.prompting import PromptStore
+from zotero_quick_read.prompting import PromptStore, parse_prompt_profile
 from zotero_quick_read.schemas import JobSubmit
 
 
@@ -154,7 +154,17 @@ def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
         pdf=PdfSettings(stable_seconds=0, min_text_chars=50, chunk_chars=5000),
     )
     default_profile = PromptStore.builtin("physics-zh-v1")
-    selected_profile = PromptStore.builtin("method-reproduction-zh-v1")
+    selected_template = PromptStore.builtin("method-reproduction-zh-v1")
+    selected_profile = parse_prompt_profile(
+        selected_template.raw_text.replace(
+            "\n---\n",
+            "\ntarget_min_chinese_chars: 1800\n"
+            "target_max_chinese_chars: 3000\n---\n",
+            1,
+        ),
+        source="test",
+        path="method-deep.md",
+    )
     job, _ = db.enqueue(
         JobSubmit(
             library_id=1,
@@ -182,5 +192,10 @@ def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
     assert completed.result["processing"]["prompt_profile"]["id"] == (
         "method-reproduction-zh-v1"
     )
+    assert completed.result["processing"]["target_chinese_chars"] == {
+        "min": 1800,
+        "max": 3000,
+        "source": "prompt_profile",
+    }
     assert "复现与实验设计重点" in completed.result["note_html"]
     assert "综合阅读重点" not in completed.result["note_html"]

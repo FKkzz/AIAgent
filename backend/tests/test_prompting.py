@@ -4,7 +4,18 @@ import pytest
 
 from zotero_quick_read.config import OutputSettings, SettingsStore
 from zotero_quick_read.errors import QuickReadError
-from zotero_quick_read.prompting import PromptStore, final_instructions
+from zotero_quick_read.prompting import (
+    PromptStore,
+    final_instructions,
+    parse_prompt_profile,
+)
+
+
+def with_output_target(text: str, minimum: str, maximum: str | None) -> str:
+    lines = f"\ntarget_min_chinese_chars: {minimum}"
+    if maximum is not None:
+        lines += f"\ntarget_max_chinese_chars: {maximum}"
+    return text.replace("\n---\n", lines + "\n---\n", 1)
 
 
 def test_initial_profiles_are_seeded_as_editable_local_files(tmp_path: Path):
@@ -35,6 +46,56 @@ def test_compiled_prompt_contains_base_profile_schema_and_vocabulary(tmp_path: P
     assert profile.reference in compiled
 
 
+def test_profile_specific_output_length_overrides_global_default():
+    base = PromptStore.builtin("method-reproduction-zh-v1")
+    profile = parse_prompt_profile(
+        with_output_target(base.raw_text, "1800", "3000"),
+        source="test",
+        path="test-profile.md",
+    )
+
+    compiled = final_instructions(600, 1000, profile)
+
+    assert profile.output_target(600, 1000) == (1800, 3000)
+    assert profile.target_min_chinese_chars == 1800
+    assert profile.target_max_chinese_chars == 3000
+    assert profile.as_dict()["uses_default_output_length"] is False
+    assert "本次笔记目标长度：1800–3000 个中文字" in compiled
+    assert "本次笔记目标长度：600–1000 个中文字" not in compiled
+
+
+def test_profile_without_output_length_uses_global_default():
+    profile = PromptStore.builtin("physics-zh-v1")
+
+    assert profile.output_target(600, 1000) == (600, 1000)
+    assert profile.target_min_chinese_chars is None
+    assert profile.target_max_chinese_chars is None
+    assert profile.as_dict()["uses_default_output_length"] is True
+
+
+@pytest.mark.parametrize(
+    ("minimum", "maximum"),
+    [
+        ("900", None),
+        ("nine-hundred", "1400"),
+        ("199", "1400"),
+        ("900", "8001"),
+        ("1400", "900"),
+    ],
+)
+def test_invalid_profile_output_length_is_rejected(minimum: str, maximum: str | None):
+    base = PromptStore.builtin("physics-zh-v1")
+
+    with pytest.raises(QuickReadError) as caught:
+        parse_prompt_profile(
+            with_output_target(base.raw_text, minimum, maximum),
+            source="test",
+            path="invalid-length.md",
+        )
+
+    assert caught.value.code == "invalid_prompt_profile"
+
+
 def test_analysis_goals_come_from_editable_profile_not_hidden_base(tmp_path: Path):
     profile = PromptStore(tmp_path).resolve("literature-survey-zh-v1")
     compiled = final_instructions(600, 1000, profile)
@@ -61,6 +122,22 @@ def test_custom_profile_is_versioned_by_its_content(tmp_path: Path):
         encoding="utf-8",
     )
     assert store.resolve("my-project-v1").reference != old_reference
+
+
+def test_created_profile_preserves_source_output_length(tmp_path: Path):
+    store = PromptStore(tmp_path)
+    source = store.resolve("method-reproduction-zh-v1")
+    source_path = Path(source.path)
+    source_path.write_text(
+        with_output_target(source.raw_text, "1800", "3000"),
+        encoding="utf-8",
+    )
+
+    created = store.create("deep-method-v1", from_profile=source.id)
+
+    assert created.output_target(600, 1000) == (1800, 3000)
+    assert "target_min_chinese_chars: 1800" in created.raw_text
+    assert "target_max_chinese_chars: 3000" in created.raw_text
 
 
 def test_invalid_or_duplicate_profile_id_is_rejected(tmp_path: Path):

@@ -29,7 +29,7 @@ class FakeSession:
                 {
                     "status": "ok",
                     "loopback": True,
-                    "version": "2.4.0",
+                    "version": "2.5.0",
                     "pid": 1234,
                     "started_at": "2026-10-12T00:00:00+00:00",
                 },
@@ -65,7 +65,7 @@ def test_status_reports_running_model_and_pid(tmp_path: Path, monkeypatch):
     status = service.status()
     assert status["running"] is True
     assert status["authenticated"] is True
-    assert status["version"] == "2.4.0"
+    assert status["version"] == "2.5.0"
     assert status["pid"] == 1234
     assert status["selected_model"] == "gpt-5.6-terra"
     assert status["prompt_profile"]["id"] == "physics-zh-v1"

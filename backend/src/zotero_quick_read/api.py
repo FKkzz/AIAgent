@@ -107,6 +107,22 @@ def create_app(
 
     protected = [Depends(require_token)]
 
+    def prompt_metadata(profile):
+        target_min, target_max = profile.output_target(
+            active.settings.output.target_min_chinese_chars,
+            active.settings.output.target_max_chinese_chars,
+        )
+        return {
+            **profile.as_dict(),
+            "effective_target_min_chinese_chars": target_min,
+            "effective_target_max_chinese_chars": target_max,
+            "output_length_source": (
+                "prompt_profile"
+                if profile.target_min_chinese_chars is not None
+                else "global_default"
+            ),
+        }
+
     @app.get("/health")
     def health():
         return {
@@ -138,7 +154,7 @@ def create_app(
             "version": __version__,
             "auth_mode": settings.auth_mode,
             "selected_model": settings.selected_model,
-            "prompt_profile": prompt_profile.as_dict(),
+            "prompt_profile": prompt_metadata(prompt_profile),
             "prompt_version": prompt_profile.reference,
             "proxy": {
                 "enabled": settings.proxy.enabled,
@@ -168,8 +184,8 @@ def create_app(
                 f"后台默认提示词方案不存在：{default_id}。请先运行 prompt use 选择有效方案。",
             )
         return {
-            "default": default_profile.as_dict(),
-            "profiles": [profile.as_dict() for profile in profiles],
+            "default": prompt_metadata(default_profile),
+            "profiles": [prompt_metadata(profile) for profile in profiles],
         }
 
     @app.post("/api/v1/jobs", dependencies=protected)

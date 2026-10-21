@@ -48,6 +48,9 @@ def test_prompt_catalog_exposes_local_profiles_and_default(tmp_path: Path):
     assert response.status_code == 200
     catalog = response.json()
     assert catalog["default"]["id"] == "physics-zh-v1"
+    assert catalog["default"]["effective_target_min_chinese_chars"] == 600
+    assert catalog["default"]["effective_target_max_chinese_chars"] == 1000
+    assert catalog["default"]["output_length_source"] == "global_default"
     assert {profile["id"] for profile in catalog["profiles"]} == {
         "physics-zh-v1",
         "literature-survey-zh-v1",

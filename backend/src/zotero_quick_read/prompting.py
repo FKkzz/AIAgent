@@ -30,6 +30,12 @@ REQUIRED_METADATA = (
     "note_heading",
     "chunk_focus",
 )
+OUTPUT_LENGTH_METADATA = (
+    "target_min_chinese_chars",
+    "target_max_chinese_chars",
+)
+TARGET_MIN_RANGE = (200, 5000)
+TARGET_MAX_RANGE = (300, 8000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +46,8 @@ class PromptProfile:
     description: str
     note_heading: str
     chunk_focus: str
+    target_min_chinese_chars: int | None
+    target_max_chinese_chars: int | None
     body: str
     raw_text: str
     source: str
@@ -55,6 +63,13 @@ class PromptProfile:
         digest = hashlib.sha256(prompt_bytes).hexdigest()[:12]
         return f"{self.id}@{self.version}+{digest}"
 
+    def output_target(self, default_min: int, default_max: int) -> tuple[int, int]:
+        if self.target_min_chinese_chars is None:
+            return default_min, default_max
+        if self.target_max_chinese_chars is None:  # parser invariant; defensive boundary
+            raise RuntimeError("prompt profile output target is incomplete")
+        return self.target_min_chinese_chars, self.target_max_chinese_chars
+
     def as_dict(self, *, include_content: bool = False) -> dict:
         value = {
             "id": self.id,
@@ -64,6 +79,9 @@ class PromptProfile:
             "description": self.description,
             "note_heading": self.note_heading,
             "chunk_focus": self.chunk_focus,
+            "target_min_chinese_chars": self.target_min_chinese_chars,
+            "target_max_chinese_chars": self.target_max_chinese_chars,
+            "uses_default_output_length": self.target_min_chinese_chars is None,
             "source": self.source,
             "editable": self.editable,
             "path": self.path,
@@ -141,6 +159,8 @@ class PromptStore:
                 "description": f"从 {base.id} 复制；请按当前科研阶段修改。",
                 "note_heading": base.note_heading,
                 "chunk_focus": base.chunk_focus,
+                "target_min_chinese_chars": base.target_min_chinese_chars,
+                "target_max_chinese_chars": base.target_max_chinese_chars,
             },
             base.body,
         )
@@ -264,6 +284,7 @@ def parse_prompt_profile(text: str, *, source: str, path: str) -> PromptProfile:
             f"提示词文件缺少元数据：{', '.join(missing)}（{path}）。",
         )
     validate_profile_id(metadata["id"])
+    target_min, target_max = _parse_output_targets(metadata, path=path)
     body = normalized[marker + 5 :].strip()
     if len(body) < 40:
         raise QuickReadError(
@@ -282,6 +303,8 @@ def parse_prompt_profile(text: str, *, source: str, path: str) -> PromptProfile:
         description=metadata["description"],
         note_heading=metadata["note_heading"],
         chunk_focus=metadata["chunk_focus"],
+        target_min_chinese_chars=target_min,
+        target_max_chinese_chars=target_max,
         body=body,
         raw_text=normalized.strip() + "\n",
         source=source,
@@ -289,9 +312,52 @@ def parse_prompt_profile(text: str, *, source: str, path: str) -> PromptProfile:
     )
 
 
-def render_prompt_profile(metadata: dict[str, str], body: str) -> str:
+def _parse_output_targets(
+    metadata: dict[str, str],
+    *,
+    path: str,
+) -> tuple[int | None, int | None]:
+    present = [key in metadata for key in OUTPUT_LENGTH_METADATA]
+    if any(present) and not all(present):
+        raise QuickReadError(
+            "invalid_prompt_profile",
+            "提示词自定义输出长度时，target_min_chinese_chars 和 "
+            f"target_max_chinese_chars 必须同时填写（{path}）。",
+        )
+    if not any(present):
+        return None, None
+    values = [metadata[key] for key in OUTPUT_LENGTH_METADATA]
+    if not all(re.fullmatch(r"\d+", value) for value in values):
+        raise QuickReadError(
+            "invalid_prompt_profile",
+            f"提示词输出长度必须是十进制整数（{path}）。",
+        )
+    target_min, target_max = (int(value) for value in values)
+    if not TARGET_MIN_RANGE[0] <= target_min <= TARGET_MIN_RANGE[1]:
+        raise QuickReadError(
+            "invalid_prompt_profile",
+            f"target_min_chinese_chars 必须在 200–5000 之间（{path}）。",
+        )
+    if not TARGET_MAX_RANGE[0] <= target_max <= TARGET_MAX_RANGE[1]:
+        raise QuickReadError(
+            "invalid_prompt_profile",
+            f"target_max_chinese_chars 必须在 300–8000 之间（{path}）。",
+        )
+    if target_max < target_min:
+        raise QuickReadError(
+            "invalid_prompt_profile",
+            f"target_max_chinese_chars 不能小于 target_min_chinese_chars（{path}）。",
+        )
+    return target_min, target_max
+
+
+def render_prompt_profile(metadata: dict[str, str | int | None], body: str) -> str:
     lines = ["---"]
     lines.extend(f"{key}: {metadata[key]}" for key in REQUIRED_METADATA)
+    if metadata.get("target_min_chinese_chars") is not None:
+        lines.extend(
+            f"{key}: {metadata[key]}" for key in OUTPUT_LENGTH_METADATA
+        )
     lines.extend(("---", "", body.strip(), ""))
     return "\n".join(lines)
 
@@ -318,6 +384,7 @@ def final_instructions(
     target_max: int,
     profile: PromptProfile,
 ) -> str:
+    target_min, target_max = profile.output_target(target_min, target_max)
     schema = json.dumps(QuickReadResult.model_json_schema(), ensure_ascii=False, indent=2)
     vocabulary = json.dumps(read_vocabulary(), ensure_ascii=False, separators=(",", ":"))
     return (
