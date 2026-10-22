@@ -28,6 +28,7 @@ zqr-settings-connected-default = Backend connected. Default analysis method: { $
 zqr-prompt-select-title = Choose Analysis Method
 zqr-prompt-select-message = Choose the analysis method for the selected paper(s). This affects only this submission and does not change the default:
 zqr-settings-health-only = The backend is reachable, but authentication failed: { $error }
+zqr-settings-prompt-error = Backend authentication succeeded, but the analysis-method selector failed: { $error }
 zqr-settings-invalid-url = Invalid URL. Use only http://127.0.0.1:port, without a path, credentials, query, or fragment.
 zqr-settings-invalid-token = The token cannot be whitespace, contain a line break, or exceed 4096 characters.
 

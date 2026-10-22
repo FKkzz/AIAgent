@@ -28,6 +28,7 @@ zqr-settings-connected-default = 后台连接正常。默认分析方法：{ $pr
 zqr-prompt-select-title = 选择分析方法
 zqr-prompt-select-message = 请选择这次分析所用的方法；只影响当前所选论文，不会修改默认设置：
 zqr-settings-health-only = 后台可连接，但认证失败：{ $error }
+zqr-settings-prompt-error = 后台认证成功，但分析方法选择窗口打开失败：{ $error }
 zqr-settings-invalid-url = 地址无效。仅允许 http://127.0.0.1:端口，且不能包含路径、账号或查询参数。
 zqr-settings-invalid-token = Token 不能为空白字符、包含换行，且长度不能超过 4096 个字符。
 

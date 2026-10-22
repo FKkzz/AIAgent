@@ -34,9 +34,9 @@ def test_protected_endpoint_rejects_missing_or_bad_token(tmp_path: Path):
     )
     assert ok.status_code == 200
     info = ok.json()
-    assert info["prompt_profile"]["id"] == "physics-zh-v1"
+    assert info["prompt_profile"]["id"] == "physics-fast-reading-zh"
     assert info["prompt_profile"]["source"] == "local"
-    assert info["prompt_version"].startswith("physics-zh-v1@1.0.0+")
+    assert info["prompt_version"].startswith("physics-fast-reading-zh@2.0.0+")
 
 
 def test_prompt_catalog_exposes_local_profiles_and_default(tmp_path: Path):
@@ -47,15 +47,13 @@ def test_prompt_catalog_exposes_local_profiles_and_default(tmp_path: Path):
 
     assert response.status_code == 200
     catalog = response.json()
-    assert catalog["default"]["id"] == "physics-zh-v1"
-    assert catalog["default"]["effective_target_min_chinese_chars"] == 600
-    assert catalog["default"]["effective_target_max_chinese_chars"] == 1000
-    assert catalog["default"]["output_length_source"] == "global_default"
+    assert catalog["default"]["id"] == "physics-fast-reading-zh"
+    assert catalog["default"]["effective_target_min_chinese_chars"] == 900
+    assert catalog["default"]["effective_target_max_chinese_chars"] == 1400
+    assert catalog["default"]["output_length_source"] == "prompt_profile"
     assert {profile["id"] for profile in catalog["profiles"]} == {
-        "physics-zh-v1",
-        "literature-survey-zh-v1",
-        "method-reproduction-zh-v1",
-        "critical-review-zh-v1",
+        "physics-fast-reading-zh",
+        "physics-methods-deep-zh",
     }
     assert all(profile["source"] == "local" for profile in catalog["profiles"])
     assert all("content" not in profile for profile in catalog["profiles"])
@@ -105,19 +103,19 @@ def test_submit_can_override_prompt_profile_per_job(tmp_path: Path):
         "attachment_key": "HGFEDCBA",
         "attachment_path": str(pdf),
         "title": "Paper",
-        "prompt_profile": "method-reproduction-zh-v1",
+        "prompt_profile": "physics-methods-deep-zh",
     }
 
     response = client.post("/api/v1/jobs", json=payload, headers=headers)
 
     assert response.status_code == 200
     job = response.json()["job"]
-    assert job["prompt_profile"]["id"] == "method-reproduction-zh-v1"
-    assert job["instruction_version"].startswith("method-reproduction-zh-v1@1.0.0+")
+    assert job["prompt_profile"]["id"] == "physics-methods-deep-zh"
+    assert job["instruction_version"].startswith("physics-methods-deep-zh@2.0.0+")
     assert "content" not in job["prompt_profile"]
     snapshot = runtime.db.payload(job["id"])["prompt_profile"]
-    assert snapshot["id"] == "method-reproduction-zh-v1"
-    assert "# 角色与输出目标" in snapshot["content"]
+    assert snapshot["id"] == "physics-methods-deep-zh"
+    assert "# 任务" in snapshot["content"]
 
 
 def test_different_prompt_profiles_do_not_deduplicate(tmp_path: Path):
@@ -136,7 +134,7 @@ def test_different_prompt_profiles_do_not_deduplicate(tmp_path: Path):
     default = client.post("/api/v1/jobs", json=payload, headers=headers)
     method = client.post(
         "/api/v1/jobs",
-        json={**payload, "prompt_profile": "method-reproduction-zh-v1"},
+        json={**payload, "prompt_profile": "physics-methods-deep-zh"},
         headers=headers,
     )
 

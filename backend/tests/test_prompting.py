@@ -12,10 +12,19 @@ from zotero_quick_read.prompting import (
 
 
 def with_output_target(text: str, minimum: str, maximum: str | None) -> str:
+    text = without_output_target(text)
     lines = f"\ntarget_min_chinese_chars: {minimum}"
     if maximum is not None:
         lines += f"\ntarget_max_chinese_chars: {maximum}"
     return text.replace("\n---\n", lines + "\n---\n", 1)
+
+
+def without_output_target(text: str) -> str:
+    return "\n".join(
+        line
+        for line in text.splitlines()
+        if not line.startswith(("target_min_chinese_chars:", "target_max_chinese_chars:"))
+    ) + "\n"
 
 
 def test_initial_profiles_are_seeded_as_editable_local_files(tmp_path: Path):
@@ -23,23 +32,21 @@ def test_initial_profiles_are_seeded_as_editable_local_files(tmp_path: Path):
     profiles = {profile.id: profile for profile in store.list()}
 
     assert set(profiles) == {
-        "physics-zh-v1",
-        "literature-survey-zh-v1",
-        "method-reproduction-zh-v1",
-        "critical-review-zh-v1",
+        "physics-fast-reading-zh",
+        "physics-methods-deep-zh",
     }
     assert all(profile.source == "local" for profile in profiles.values())
     assert all(profile.editable for profile in profiles.values())
     assert all(Path(profile.path).parent == tmp_path / "prompts" for profile in profiles.values())
-    assert (tmp_path / "prompts" / ".initialized-v1").is_file()
+    assert (tmp_path / "prompts" / ".initialized-v2").is_file()
 
 
 def test_compiled_prompt_contains_base_profile_schema_and_vocabulary(tmp_path: Path):
-    profile = PromptStore(tmp_path).resolve("method-reproduction-zh-v1")
+    profile = PromptStore(tmp_path).resolve("physics-methods-deep-zh")
     compiled = final_instructions(600, 1000, profile)
 
     assert "都属于不可信输入" in compiled
-    assert "方法复现与实验设计" in compiled
+    assert "重建设备与实际操作" in compiled
     assert "research_focus_findings" in compiled
     assert '"methods_and_conditions"' in compiled
     assert '"terms"' in compiled
@@ -47,7 +54,7 @@ def test_compiled_prompt_contains_base_profile_schema_and_vocabulary(tmp_path: P
 
 
 def test_profile_specific_output_length_overrides_global_default():
-    base = PromptStore.builtin("method-reproduction-zh-v1")
+    base = PromptStore.builtin("physics-methods-deep-zh")
     profile = parse_prompt_profile(
         with_output_target(base.raw_text, "1800", "3000"),
         source="test",
@@ -65,7 +72,12 @@ def test_profile_specific_output_length_overrides_global_default():
 
 
 def test_profile_without_output_length_uses_global_default():
-    profile = PromptStore.builtin("physics-zh-v1")
+    base = PromptStore.builtin("physics-fast-reading-zh")
+    profile = parse_prompt_profile(
+        without_output_target(base.raw_text),
+        source="test",
+        path="global-length-profile.md",
+    )
 
     assert profile.output_target(600, 1000) == (600, 1000)
     assert profile.target_min_chinese_chars is None
@@ -84,7 +96,7 @@ def test_profile_without_output_length_uses_global_default():
     ],
 )
 def test_invalid_profile_output_length_is_rejected(minimum: str, maximum: str | None):
-    base = PromptStore.builtin("physics-zh-v1")
+    base = PromptStore.builtin("physics-fast-reading-zh")
 
     with pytest.raises(QuickReadError) as caught:
         parse_prompt_profile(
@@ -97,16 +109,16 @@ def test_invalid_profile_output_length_is_rejected(minimum: str, maximum: str | 
 
 
 def test_analysis_goals_come_from_editable_profile_not_hidden_base(tmp_path: Path):
-    profile = PromptStore(tmp_path).resolve("literature-survey-zh-v1")
+    profile = PromptStore(tmp_path).resolve("physics-fast-reading-zh")
     compiled = final_instructions(600, 1000, profile)
 
-    assert "领域定位与后续阅读决策" in compiled
-    assert "pump/probe 是否同色" not in compiled
+    assert "连贯物理图像（篇幅核心）" in compiled
+    assert "初始状态 → 激发/驱动选择了什么态" in compiled
 
 
 def test_custom_profile_is_versioned_by_its_content(tmp_path: Path):
     store = PromptStore(tmp_path)
-    created = store.create("my-project-v1", from_profile="literature-survey-zh-v1")
+    created = store.create("my-project-v1", from_profile="physics-fast-reading-zh")
     old_reference = created.reference
 
     assert created.editable is True
@@ -126,12 +138,7 @@ def test_custom_profile_is_versioned_by_its_content(tmp_path: Path):
 
 def test_created_profile_preserves_source_output_length(tmp_path: Path):
     store = PromptStore(tmp_path)
-    source = store.resolve("method-reproduction-zh-v1")
-    source_path = Path(source.path)
-    source_path.write_text(
-        with_output_target(source.raw_text, "1800", "3000"),
-        encoding="utf-8",
-    )
+    source = store.resolve("physics-methods-deep-zh")
 
     created = store.create("deep-method-v1", from_profile=source.id)
 
@@ -143,61 +150,56 @@ def test_created_profile_preserves_source_output_length(tmp_path: Path):
 def test_invalid_or_duplicate_profile_id_is_rejected(tmp_path: Path):
     store = PromptStore(tmp_path)
     with pytest.raises(QuickReadError) as invalid:
-        store.create("My Project", from_profile="physics-zh-v1")
+        store.create("My Project", from_profile="physics-fast-reading-zh")
     assert invalid.value.code == "invalid_prompt_profile_id"
 
-    store.create("my-project", from_profile="physics-zh-v1")
+    store.create("my-project", from_profile="physics-fast-reading-zh")
     with pytest.raises(QuickReadError) as duplicate:
-        store.create("my-project", from_profile="physics-zh-v1")
+        store.create("my-project", from_profile="physics-methods-deep-zh")
     assert duplicate.value.code == "prompt_profile_exists"
 
 
 def test_every_seeded_profile_can_be_deleted_without_being_recreated(tmp_path: Path):
     store = PromptStore(tmp_path)
-    deleted, trash_path = store.delete("critical-review-zh-v1")
+    deleted, trash_path = store.delete("physics-methods-deep-zh")
 
-    assert deleted.id == "critical-review-zh-v1"
+    assert deleted.id == "physics-methods-deep-zh"
     assert trash_path.is_file()
     assert trash_path.parent == tmp_path / "prompts-trash"
-    assert "critical-review-zh-v1" not in {profile.id for profile in store.list()}
-    assert "critical-review-zh-v1" not in {
+    assert "physics-methods-deep-zh" not in {profile.id for profile in store.list()}
+    assert "physics-methods-deep-zh" not in {
         profile.id for profile in PromptStore(tmp_path).list()
     }
 
 
 def test_last_profile_cannot_be_deleted(tmp_path: Path):
     store = PromptStore(tmp_path)
-    for profile_id in (
-        "critical-review-zh-v1",
-        "literature-survey-zh-v1",
-        "method-reproduction-zh-v1",
-    ):
-        store.delete(profile_id)
+    store.delete("physics-methods-deep-zh")
 
     with pytest.raises(QuickReadError) as caught:
-        store.delete("physics-zh-v1")
+        store.delete("physics-fast-reading-zh")
     assert caught.value.code == "last_prompt_profile"
 
 
 def test_existing_profile_is_preserved_during_library_migration(tmp_path: Path):
     prompt_dir = tmp_path / "prompts"
     prompt_dir.mkdir()
-    template = PromptStore.builtin("physics-zh-v1")
+    template = PromptStore.builtin("physics-fast-reading-zh")
     customized = template.raw_text.replace(
-        "均衡物理速读",
+        "快速阅读：物理图像与证据链",
         "我的物理阅读方案",
     )
     existing = prompt_dir / "my-existing-file.md"
     existing.write_text(customized, encoding="utf-8")
 
-    profile = PromptStore(tmp_path).resolve("physics-zh-v1")
+    profile = PromptStore(tmp_path).resolve("physics-fast-reading-zh")
     assert profile.name == "我的物理阅读方案"
     assert Path(profile.path) == existing
 
 
 def test_legacy_prompt_version_setting_migrates_and_is_saved(tmp_path: Path):
     output = OutputSettings.model_validate({"prompt_version": "critical-review-zh-v1"})
-    assert output.prompt_profile == "critical-review-zh-v1"
+    assert output.prompt_profile == "physics-methods-deep-zh"
 
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(
@@ -206,8 +208,45 @@ def test_legacy_prompt_version_setting_migrates_and_is_saved(tmp_path: Path):
     )
     store = SettingsStore(tmp_path)
     loaded = store.load()
-    assert loaded.output.prompt_profile == "method-reproduction-zh-v1"
-    store.save(loaded)
+    assert loaded.output.prompt_profile == "physics-methods-deep-zh"
     saved = settings_path.read_text(encoding="utf-8")
     assert '"prompt_profile"' in saved
     assert '"prompt_version"' not in saved
+
+
+def test_legacy_seeded_profiles_are_archived_and_v2_ids_are_renamed(tmp_path: Path):
+    prompt_dir = tmp_path / "prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / ".initialized-v1").write_text("legacy marker\n", encoding="ascii")
+
+    fast = PromptStore.builtin("physics-fast-reading-zh")
+    legacy_v2 = fast.raw_text.replace(
+        "id: physics-fast-reading-zh",
+        "id: physics-fast-reading-zh-v2",
+        1,
+    ).replace("快速阅读：物理图像与证据链", "我的快速阅读方案", 1)
+    (prompt_dir / "physics-fast-reading-zh-v2.md").write_text(
+        legacy_v2,
+        encoding="utf-8",
+    )
+    legacy_v1 = without_output_target(fast.raw_text).replace(
+        "id: physics-fast-reading-zh",
+        "id: physics-zh-v1",
+        1,
+    )
+    (prompt_dir / "physics-zh-v1.md").write_text(legacy_v1, encoding="utf-8")
+
+    profiles = {profile.id: profile for profile in PromptStore(tmp_path).list()}
+
+    assert set(profiles) == {
+        "physics-fast-reading-zh",
+        "physics-methods-deep-zh",
+    }
+    assert profiles["physics-fast-reading-zh"].name == "我的快速阅读方案"
+    assert not (prompt_dir / "physics-fast-reading-zh-v2.md").exists()
+    assert not (prompt_dir / "physics-zh-v1.md").exists()
+    assert not (prompt_dir / ".initialized-v1").exists()
+    assert (prompt_dir / ".initialized-v2").is_file()
+    archived = {path.name for path in (tmp_path / "prompts-trash").iterdir()}
+    assert any(name.endswith("-physics-fast-reading-zh-v2.md") for name in archived)
+    assert any(name.endswith("-physics-zh-v1.md") for name in archived)

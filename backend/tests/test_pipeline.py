@@ -6,7 +6,7 @@ import pymupdf as fitz
 from zotero_quick_read.config import AppSettings, PdfSettings
 from zotero_quick_read.db import QueueDB
 from zotero_quick_read.pipeline import InferenceResult, JobWorker
-from zotero_quick_read.prompting import PromptStore, parse_prompt_profile
+from zotero_quick_read.prompting import PromptStore
 from zotero_quick_read.schemas import JobSubmit
 
 
@@ -129,7 +129,9 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
     assert completed.result["tags"] == ["超快动力学"]
     assert "AI 速读" in completed.result["note_html"]
     assert completed.result["processing"]["total_pages"] == 2
-    assert completed.result["processing"]["prompt_profile"]["id"] == "physics-zh-v1"
+    assert completed.result["processing"]["prompt_profile"]["id"] == (
+        "physics-fast-reading-zh"
+    )
     assert completed.result["processing"]["elapsed_seconds"] >= 0
     note_html = completed.result["note_html"]
     usage = completed.result["processing"]["usage"]
@@ -140,9 +142,9 @@ def test_worker_only_completes_after_validated_result(tmp_path: Path):
     assert "处理耗时" in note_html
     assert "生成时间" in note_html
     assert "文件指纹" not in note_html
-    assert "physics-zh-v1" not in note_html
+    assert "physics-fast-reading-zh" not in note_html
     assert "per_request" not in note_html
-    assert "综合阅读重点" in note_html
+    assert "物理图像与关键证据" in note_html
 
 
 def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
@@ -153,18 +155,8 @@ def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
         selected_model="available-model",
         pdf=PdfSettings(stable_seconds=0, min_text_chars=50, chunk_chars=5000),
     )
-    default_profile = PromptStore.builtin("physics-zh-v1")
-    selected_template = PromptStore.builtin("method-reproduction-zh-v1")
-    selected_profile = parse_prompt_profile(
-        selected_template.raw_text.replace(
-            "\n---\n",
-            "\ntarget_min_chinese_chars: 1800\n"
-            "target_max_chinese_chars: 3000\n---\n",
-            1,
-        ),
-        source="test",
-        path="method-deep.md",
-    )
+    default_profile = PromptStore.builtin("physics-fast-reading-zh")
+    selected_profile = PromptStore.builtin("physics-methods-deep-zh")
     job, _ = db.enqueue(
         JobSubmit(
             library_id=1,
@@ -190,12 +182,12 @@ def test_worker_uses_the_prompt_snapshot_attached_to_the_job(tmp_path: Path):
     assert worker.process_one() is True
     completed = db.get(job.id)
     assert completed.result["processing"]["prompt_profile"]["id"] == (
-        "method-reproduction-zh-v1"
+        "physics-methods-deep-zh"
     )
     assert completed.result["processing"]["target_chinese_chars"] == {
         "min": 1800,
         "max": 3000,
         "source": "prompt_profile",
     }
-    assert "复现与实验设计重点" in completed.result["note_html"]
-    assert "综合阅读重点" not in completed.result["note_html"]
+    assert "实验逻辑与复现要点" in completed.result["note_html"]
+    assert "物理图像与关键证据" not in completed.result["note_html"]

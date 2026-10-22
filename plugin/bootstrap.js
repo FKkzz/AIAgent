@@ -63,6 +63,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 			"zqr-prompt-select-title": "Choose Analysis Method",
 			"zqr-prompt-select-message": "Choose the analysis method for the selected paper(s). This does not change the default:",
 			"zqr-settings-health-only": "The backend is reachable, but authentication failed: {error}",
+			"zqr-settings-prompt-error": "Backend authentication succeeded, but the analysis-method selector failed: {error}",
 			"zqr-settings-invalid-url": "Use an HTTP URL on 127.0.0.1 without a path, credentials, query, or fragment.",
 			"zqr-settings-invalid-token": "The token cannot contain a line break or exceed 4096 characters.",
 			"zqr-notify-submitted": "Submitted {count} quick-read task(s).",
@@ -423,7 +424,6 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				window || null,
 				title,
 				message,
-				entries.length,
 				entries.map(entry => entry.label),
 				selected
 			);
@@ -1321,6 +1321,12 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 				}
 				try {
 					await apiRequest("GET", "/api/v1/info", { timeout: 5000 });
+				}
+				catch (error) {
+					await showAlert("zqr-settings-health-only", { error: safeError(error) }, window);
+					return;
+				}
+				try {
 					const selected = await choosePromptProfile(window, {
 						includeBackendDefault: true,
 						titleID: "zqr-dialog-title",
@@ -1341,7 +1347,7 @@ var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQ
 					}
 				}
 				catch (error) {
-					await showAlert("zqr-settings-health-only", { error: safeError(error) }, window);
+					await showAlert("zqr-settings-prompt-error", { error: safeError(error) }, window);
 				}
 			}
 			catch (error) {

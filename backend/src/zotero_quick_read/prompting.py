@@ -14,13 +14,24 @@ from .schemas import QuickReadResult
 
 BASE_PROMPT_FILE = "runtime-protocol-v2.md"
 BUILTIN_PROFILE_FILES = (
-    "prompt-profile-physics-zh-v1.md",
-    "prompt-profile-literature-survey-zh-v1.md",
-    "prompt-profile-method-reproduction-zh-v1.md",
-    "prompt-profile-critical-review-zh-v1.md",
+    "prompt-profile-physics-fast-reading-zh.md",
+    "prompt-profile-physics-methods-deep-zh.md",
 )
-DEFAULT_PROFILE_ID = "physics-zh-v1"
-PROMPT_LIBRARY_MARKER = ".initialized-v1"
+DEFAULT_PROFILE_ID = "physics-fast-reading-zh"
+PROMPT_LIBRARY_MARKER = ".initialized-v2"
+LEGACY_LIBRARY_MARKER = ".initialized-v1"
+LEGACY_PROFILE_RENAMES = {
+    "physics-fast-reading-zh-v2": "physics-fast-reading-zh",
+    "physics-methods-deep-zh-v2": "physics-methods-deep-zh",
+}
+LEGACY_SEEDED_PROFILE_IDS = frozenset(
+    {
+        "physics-zh-v1",
+        "literature-survey-zh-v1",
+        "method-reproduction-zh-v1",
+        "critical-review-zh-v1",
+    }
+)
 PROFILE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 REQUIRED_METADATA = (
     "id",
@@ -191,16 +202,15 @@ class PromptStore:
                 "invalid_prompt_profile_path",
                 f"拒绝删除提示词目录之外的文件：{source}",
             )
-        self.trash_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-        destination = self.trash_dir / f"{timestamp}-{source.name}"
-        os.replace(source, destination)
+        destination = self._archive(source)
         return profile, destination
 
     def _initialize_library(self) -> None:
         self.custom_dir.mkdir(parents=True, exist_ok=True)
         if self.marker_path.is_file():
             return
+
+        self._migrate_legacy_library()
 
         existing_ids: set[str] = set()
         for path in sorted(self.custom_dir.glob("*.md")):
@@ -230,6 +240,50 @@ class PromptStore:
                 handle.write("Prompt library initialized by Zotero Quick Read.\n")
         except FileExistsError:
             pass
+
+    def _migrate_legacy_library(self) -> None:
+        profiles: list[tuple[Path, PromptProfile]] = []
+        for path in sorted(self.custom_dir.glob("*.md")):
+            profiles.append(
+                (
+                    path,
+                    parse_prompt_profile(
+                        path.read_text(encoding="utf-8"),
+                        source="local",
+                        path=str(path),
+                    ),
+                )
+            )
+
+        existing_ids = {profile.id for _, profile in profiles}
+        for path, profile in profiles:
+            replacement_id = LEGACY_PROFILE_RENAMES.get(profile.id)
+            if replacement_id:
+                destination = self.custom_dir / f"{replacement_id}.md"
+                if replacement_id not in existing_ids and not destination.exists():
+                    migrated = re.sub(
+                        rf"(?m)^id:\s*{re.escape(profile.id)}\s*$",
+                        f"id: {replacement_id}",
+                        profile.raw_text,
+                        count=1,
+                    )
+                    temp = destination.with_suffix(".md.tmp")
+                    temp.write_text(migrated, encoding="utf-8", newline="\n")
+                    os.replace(temp, destination)
+                    existing_ids.add(replacement_id)
+                self._archive(path)
+            elif profile.id in LEGACY_SEEDED_PROFILE_IDS:
+                self._archive(path)
+
+        legacy_marker = self.custom_dir / LEGACY_LIBRARY_MARKER
+        legacy_marker.unlink(missing_ok=True)
+
+    def _archive(self, source: Path) -> Path:
+        self.trash_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        destination = self.trash_dir / f"{timestamp}-{source.name}"
+        os.replace(source, destination)
+        return destination
 
     def _builtins(self) -> list[PromptProfile]:
         profiles = []

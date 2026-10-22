@@ -483,7 +483,7 @@ def _dispatch_prompt(
         restart_required = profile.id == selected
         if restart_required:
             preferred = next(
-                (item for item in remaining if item.id == "physics-zh-v1"),
+                (item for item in remaining if item.id == "physics-fast-reading-zh"),
                 remaining[0],
             )
             selected_after = preferred.id

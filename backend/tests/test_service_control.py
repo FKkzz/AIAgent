@@ -29,7 +29,7 @@ class FakeSession:
                 {
                     "status": "ok",
                     "loopback": True,
-                    "version": "2.5.0",
+                    "version": "2.5.1",
                     "pid": 1234,
                     "started_at": "2026-10-12T00:00:00+00:00",
                 },
@@ -39,7 +39,10 @@ class FakeSession:
             {
                 "selected_model": "gpt-5.6-terra",
                 "auth_mode": "chatgpt",
-                "prompt_profile": {"id": "physics-zh-v1", "version": "1.0.0"},
+                "prompt_profile": {
+                    "id": "physics-fast-reading-zh",
+                    "version": "2.0.0",
+                },
             },
         )
 
@@ -65,10 +68,10 @@ def test_status_reports_running_model_and_pid(tmp_path: Path, monkeypatch):
     status = service.status()
     assert status["running"] is True
     assert status["authenticated"] is True
-    assert status["version"] == "2.5.0"
+    assert status["version"] == "2.5.1"
     assert status["pid"] == 1234
     assert status["selected_model"] == "gpt-5.6-terra"
-    assert status["prompt_profile"]["id"] == "physics-zh-v1"
+    assert status["prompt_profile"]["id"] == "physics-fast-reading-zh"
     assert fake_session.calls[-1][2] == {"Authorization": "Bearer secret"}
 
 
@@ -107,8 +110,16 @@ def test_cli_exposes_explicit_service_commands():
 def test_cli_exposes_prompt_crud_commands():
     parser = build_parser()
     assert parser.parse_args(["prompt", "create", "my-prompt"]).prompt_command == "create"
-    assert parser.parse_args(["prompt", "edit", "physics-zh-v1"]).prompt_command == "edit"
-    assert parser.parse_args(["prompt", "delete", "physics-zh-v1"]).prompt_command == "delete"
+    assert (
+        parser.parse_args(["prompt", "edit", "physics-fast-reading-zh"]).prompt_command
+        == "edit"
+    )
+    assert (
+        parser.parse_args(
+            ["prompt", "delete", "physics-fast-reading-zh"]
+        ).prompt_command
+        == "delete"
+    )
 
 
 def test_managed_serve_command_and_banner_are_explicit(tmp_path: Path, capsys):

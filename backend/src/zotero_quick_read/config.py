@@ -9,6 +9,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 APP_NAME = "ZoteroQuickRead"
 SETTINGS_VERSION = 1
+PROMPT_PROFILE_ALIASES = {
+    "physics-zh-v1": "physics-fast-reading-zh",
+    "literature-survey-zh-v1": "physics-fast-reading-zh",
+    "method-reproduction-zh-v1": "physics-methods-deep-zh",
+    "critical-review-zh-v1": "physics-methods-deep-zh",
+    "physics-fast-reading-zh-v2": "physics-fast-reading-zh",
+    "physics-methods-deep-zh-v2": "physics-methods-deep-zh",
+}
 
 
 def default_data_dir() -> Path:
@@ -56,15 +64,18 @@ class OutputSettings(BaseModel):
     target_min_chinese_chars: int = Field(default=600, ge=200, le=5000)
     target_max_chinese_chars: int = Field(default=1000, ge=300, le=8000)
     max_tags: int = Field(default=8, ge=1, le=12)
-    prompt_profile: str = "physics-zh-v1"
+    prompt_profile: str = "physics-fast-reading-zh"
 
     @model_validator(mode="before")
     @classmethod
     def migrate_prompt_version(cls, value):
-        if isinstance(value, dict) and "prompt_profile" not in value:
-            legacy = value.get("prompt_version")
-            if legacy:
-                value = {**value, "prompt_profile": legacy}
+        if isinstance(value, dict):
+            selected = value.get("prompt_profile") or value.get("prompt_version")
+            if selected:
+                value = {
+                    **value,
+                    "prompt_profile": PROMPT_PROFILE_ALIASES.get(selected, selected),
+                }
         return value
 
     @field_validator("prompt_profile")
@@ -116,7 +127,17 @@ class SettingsStore:
             self.save(settings)
             return settings
         try:
-            return AppSettings.model_validate_json(self.path.read_text(encoding="utf-8"))
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            settings = AppSettings.model_validate(raw)
+            output = raw.get("output") if isinstance(raw, dict) else None
+            selected = None
+            if isinstance(output, dict):
+                selected = output.get("prompt_profile") or output.get("prompt_version")
+            if isinstance(output, dict) and (
+                "prompt_version" in output or selected in PROMPT_PROFILE_ALIASES
+            ):
+                self.save(settings)
+            return settings
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Invalid settings file: {self.path}: {exc}") from exc
 

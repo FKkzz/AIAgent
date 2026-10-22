@@ -10,14 +10,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / "plugin"
-XPI = ROOT / "dist" / "zotero-quick-read-2.5.0.xpi"
+XPI = ROOT / "dist" / "zotero-quick-read-2.5.1.xpi"
 
 
 def test_manifest_targets_installed_zotero_9():
     manifest = json.loads((PLUGIN / "manifest.json").read_text(encoding="utf-8"))
     zotero = manifest["applications"]["zotero"]
     assert manifest["manifest_version"] == 2
-    assert manifest["version"] == "2.5.0"
+    assert manifest["version"] == "2.5.1"
     assert zotero["strict_min_version"] == "9.0.6"
     assert zotero["strict_max_version"] == "9.0.*"
     assert zotero["update_url"].startswith("https://")
@@ -40,6 +40,9 @@ def test_plugin_uses_dedicated_loopback_port_and_safe_zotero_apis():
     assert "body.prompt_profile" in bootstrap
     assert "effective_target_min_chinese_chars" in bootstrap
     assert "effective_target_max_chinese_chars" in bootstrap
+    assert "message,\n\t\t\t\tentries.map(entry => entry.label)," in bootstrap
+    assert "message,\n\t\t\t\tentries.length," not in bootstrap
+    assert "zqr-settings-prompt-error" in bootstrap
     assert "promptProfile" in prefs
     assert "backend-api" not in bootstrap
 
