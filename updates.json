@@ -3,13 +3,13 @@
     "zotero-quick-read@fkkzz.github.io": {
       "updates": [
         {
-          "version": "2.5.1",
-          "update_link": "https://raw.githubusercontent.com/FKkzz/AIAgent/main/dist/zotero-quick-read-2.5.1.xpi",
-          "update_hash": "sha256:65354d6f1fd12ccce3eec156496f7790a318652c6eab0458dea25b671dc505f8",
+          "version": "2.5.2",
+          "update_link": "https://raw.githubusercontent.com/FKkzz/AIAgent/main/dist/zotero-quick-read-2.5.2.xpi",
+          "update_hash": "sha256:cccbfb37c0b1ada072538bb021c3479350fdddf7750669dc52f84718ec1e47cb",
           "applications": {
             "zotero": {
               "strict_min_version": "9.0.6",
-              "strict_max_version": "9.0.*"
+              "strict_max_version": "10.0.*"
             }
           }
         }

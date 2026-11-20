@@ -15,7 +15,7 @@
 | Local API | loopback token, browser Origin rejection, submit/list/status | Passed |
 | Packaging | JS syntax and XPI root files | Passed |
 | Backend binary | EXE init, DPAPI, serve, health, authenticated info | Passed |
-| Zotero runtime | isolated-profile XPI discovery on installed Zotero 9.0.6 | Passed (`active=true`, `appDisabled=false`) |
+| Zotero runtime | isolated-profile XPI discovery on installed Zotero 10.0.8 | Passed (`active=true`, `appDisabled=false`) |
 
 The non-Windows Fernet development fallback test is skipped on Windows by design.
 

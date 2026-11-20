@@ -1,7 +1,7 @@
 # Architecture
 
 ```text
-Zotero 9 plugin
+Zotero 9/10 plugin
   ├─ item/attachment notifier
   ├─ local Bearer authentication
   ├─ default/per-paper prompt selection

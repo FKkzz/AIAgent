@@ -29,12 +29,12 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $manifest = Get-Content -LiteralPath (Join-Path $pluginDir "manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($manifest.version -ne "2.5.1") {
-    throw "Expected plugin version 2.5.1, found '$($manifest.version)'"
+if ($manifest.version -ne "2.5.2") {
+    throw "Expected plugin version 2.5.2, found '$($manifest.version)'"
 }
 if ($manifest.applications.zotero.strict_min_version -ne "9.0.6" -or
-    $manifest.applications.zotero.strict_max_version -ne "9.0.*") {
-    throw "manifest.json must target Zotero 9.0.6 through 9.0.*"
+    $manifest.applications.zotero.strict_max_version -ne "10.0.*") {
+    throw "manifest.json must target Zotero 9.0.6 through 10.0.*"
 }
 
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null

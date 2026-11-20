@@ -1,6 +1,6 @@
 /* global Zotero, Services, IOUtils, PathUtils */
 
-// Zotero 9 keeps a bootstrapped add-on's sandbox alive when the add-on is
+// Zotero 9 and 10 keep a bootstrapped add-on's sandbox alive when the add-on is
 // disabled. Keep every global declaration restart-safe and all lexical
 // declarations inside this factory.
 var ZoteroQuickReadPlugin = typeof ZoteroQuickReadPlugin === "object" && ZoteroQuickReadPlugin
